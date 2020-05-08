@@ -3,7 +3,8 @@ from os.path import join
 import pickle
 import numpy as np
 
-from eszsl import *
+# from eszsl import *
+from ESZSLClassifier import ESZSL
 
 # ('K: ', (14140, 14140))
 # ('Ktt: ', (200, 14140))
@@ -21,7 +22,6 @@ X_tr = data['seen_data_input']
 Y_tr = data['seen_data_output']
 
 class_ids = np.unique(Y_tr)
-I = np.eye(len(class_ids))
 
 cut_ratio = 4
 
@@ -35,16 +35,11 @@ new_y_tr = np.array(new_y_tr)
 Y_tr = Y_tr[new_y_tr]
 X_tr = X_tr[new_y_tr, :]
 
-Y_tr = I[Y_tr, :]
-
 print('X_tr: ', X_tr.shape)
 print('Y_tr: ', Y_tr.shape)
 
 X_ts = data['unseen_data_input']
 Y_ts = data['unseen_data_output']
-
-I = np.eye(len(np.unique(Y_ts)))
-Y_ts = I[Y_ts, :]
 
 print('X_ts: ', X_ts.shape)
 print('Y_ts: ', Y_ts.shape)
@@ -57,16 +52,16 @@ lambdap = 1e-2
 sigmap = 1e1
 
 print('Data Loaded. ')
-clf = ESZSL(sigmap = sigmap, lambdap = lambdap)
+clf = ESZSL(sigmap = sigmap, lambdap = lambdap, degree = 1)
 
 print('Fitting')
-clf.fit(X_tr, Y_tr, S_tr)
+clf.fit(X_tr, S_tr, Y_tr)
 
 print('Predicting on train data')
 Z = clf.predict(X_tr, S=S_tr)
-print(np.mean(Z==np.argmax(Y_tr, axis=1)))
+print(np.mean(Z==Y_tr))
 
 print('Predicting')
 Z = clf.predict(X_ts, S=S_ts)
-print(np.mean(Z==np.argmax(Y_ts, axis=1)))
+print(np.mean(Z==Y_ts))
 
