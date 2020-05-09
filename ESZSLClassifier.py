@@ -239,17 +239,24 @@ if __name__ == '__main__':
 	# TODO: How is this data generated. 
 	## AwA
 	# data_dir = './awa_data'
+	# with open(join(data_dir, 'full_data.pickle'), 'rb') as fp:
+	# 	data = pickle.load(fp)['data']
+	# cut_ratio = 4
+
+	## SUN
+	from utils import *
+	data = sun_to_dstruct(base_dir = "./matsun")
+	cut_ratio = 1
 
 	## Gestures
-	data_dir = './gesture_data'
-
-	with open(join(data_dir, 'full_data.pickle'), 'rb') as fp:
-		data = pickle.load(fp)['data']
+	# data_dir = './gesture_data'
+	# with open(join(data_dir, 'full_data.pickle'), 'rb') as fp:
+	# 	data = pickle.load(fp)['data']
+	# cut_ratio = 1
 
 	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
 
 	## Downsample the data: reduce the no. of instances per class
-	cut_ratio = 4
 	new_y_tr = []
 	for idx in np.unique(Y_tr):
 		temp = np.nonzero(Y_tr == idx)[0]
@@ -267,6 +274,8 @@ if __name__ == '__main__':
 	print('Y_ts: ', Y_ts.shape)
 
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	print('S_tr: ', S_tr.shape)
+	print('S_ts: ', S_ts.shape)
 
 	print('Data Loaded. ')
 	clf = ESZSL(sigmap = 1e1, lambdap = 1e-2, degree = 1)

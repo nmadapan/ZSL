@@ -17,7 +17,7 @@ This project is an open source python implementation of zero-shot learning modul
 To install the project locally, clone the repository on your Terminal in a directory of your choice:
 
 ```
-	$ https://github.com/nmadapan/ZSL.git
+$ https://github.com/nmadapan/ZSL.git
 ```
 
 # Datasets
