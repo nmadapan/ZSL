@@ -170,9 +170,9 @@ class DAP(object):
 		
 		self.clfs = []
 		if(self.binary): 
-			for _ in range(self.num_attr): self.clfs.append(SVMClassifier())
+			for _ in range(self.num_attr): self.clfs.append(SVMClassifier(rs = self.rs))
 		else: 
-			for _ in range(self.num_attr): self.clfs.append(SVMRegressor())
+			for _ in range(self.num_attr): self.clfs.append(SVMRegressor(rs = self.rs))
 
 		self.pprint()
 
@@ -348,18 +348,19 @@ class DAP(object):
 
 if __name__ == '__main__':
 	### To test on gestures ###
-	# data_path = r'/home/isat-deep/Desktop/Naveen/fg2020/data/cust_feat_data/data_0.61305.mat'
-	# classes = ['A', 'B', 'C', 'D', 'E']
-	# base_dir = './gesture_data'
-	# data = reformat_dstruct(data_path)
-	# normalize = True
-	# cut_ratio = 1
-	# parameters = {'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [50],
-	# 			  'svm__C': [1.]} # [1., 10.]
-	# p_type = 'binary2'
-	# out_fname = 'dap_' + basename(data_path)[:-4] + '.pickle'
-	# print('Gesture Data ... ', p_type)
+	data_path = r'/home/isat-deep/Desktop/Naveen/fg2020/data/cust_feat_data/data_0.61305.mat'
+	classes = ['A', 'B', 'C', 'D', 'E']
+	base_dir = './gesture_data'
+	data = reformat_dstruct(data_path)
+	normalize = False
+	cut_ratio = 1
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_' + basename(data_path)[:-4] + '.pickle'
+	print('Gesture Data ... ', p_type)
 	###########################
 
 	###### To test on awa #######
@@ -371,20 +372,22 @@ if __name__ == '__main__':
 	# cut_ratio = 1
 	# parameters = None
 	# normalize = False
-	# p_type = 'binary2'
+	# p_type = 'binary'
+	# out_fname = 'dap_awa.pickle'
 	# print('AwA data ...', p_type)
 	#############################
 
-	###### To test on awa #######
-	## SUN
-	from utils import *
-	base_dir = "./matsun"
-	data = sun_to_dstruct(base_dir = base_dir)
-	classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
-	cut_ratio = 1
-	parameters = None
-	normalize = False
-	p_type = 'binary2'
+	###### To test on sun #######
+	# from utils import *
+	# base_dir = "./matsun"
+	# data = sun_to_dstruct(base_dir = base_dir)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# cut_ratio = 1
+	# parameters = None
+	# normalize = False
+	# out_fname = 'dap_sun.pickle'
+	# p_type = 'binary2'
+	# print('SUN data ...', p_type)
 	#############################
 
 	## Downsample the data: reduce the no. of instances per class

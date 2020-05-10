@@ -6,15 +6,19 @@ from sklearn.base import BaseEstimator
 from platt import SigmoidTrain, SigmoidPredict
 from sklearn.metrics import roc_auc_score
 
+from utils import CustomScaler
+
 import warnings
 warnings.filterwarnings('ignore')
 
 class SVMClassifier(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100, rs = None):
+	def __init__(self, skewedness=3., n_components=85, C=100, clamp =3., rs = None):
 		self.platt_params = []
 		self.feature_map_fourier = SkewedChi2Sampler(skewedness=skewedness,	n_components=n_components, random_state = rs)
+		self.c_scaler = CustomScaler(clamp = clamp-0.1)
 		# random_state plays a role in LinearSVC and SVC when dual = True (It is defaulted to True). 
-		self.clf = Pipeline([('fp', self.feature_map_fourier),
+		self.clf = Pipeline([('cs', self.c_scaler),
+							 ('fp', self.feature_map_fourier),
 							 ('svm', LinearSVC(C=C, random_state = rs, class_weight = 'balanced'))
 							])
 
@@ -38,9 +42,11 @@ class SVMClassifier(BaseEstimator):
 		return SigmoidPredict(y_pred, self.platt_params)
 
 class SVMClassifierIAP(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100., rs = None):
+	def __init__(self, skewedness=3., n_components=85, C=100., clamp =3., rs = None):
+		self.c_scaler = CustomScaler(clamp = clamp-0.1)
 		self.feature_map_fourier = SkewedChi2Sampler(skewedness=skewedness,	n_components=n_components, random_state = rs)
-		self.clf = Pipeline([("fp", self.feature_map_fourier),
+		self.clf = Pipeline([('cs', self.c_scaler),
+			("fp", self.feature_map_fourier),
 			("svm", SVC(C=C, probability=True, decision_function_shape='ovr', random_state = rs))])
 
 	def fit(self, X, y):

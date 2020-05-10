@@ -169,7 +169,7 @@ class IAP(object):
 			self.X_train, self.X_test = self.preprocess(self.X_train, self.X_test, clamp_thresh = 3.0)
 		
 		# Irrespective of 'binary' true or false, we should do classification first. 
-		self.clf = SVMClassifierIAP()
+		self.clf = SVMClassifierIAP(rs = self.rs)
 
 		self.pprint()
 
@@ -350,11 +350,11 @@ if __name__ == '__main__':
 	# parameters = None
 	# normalize = False
 	# p_type = 'binary'
+	# out_fname = 'dap_awa.pickle'
 	# print('AwA data ...', p_type)
 	#############################
 
-	###### To test on awa #######
-	## SUN
+	###### To test on sun #######
 	# from utils import *
 	# base_dir = "./matsun"
 	# data = sun_to_dstruct(base_dir = base_dir)
@@ -363,6 +363,8 @@ if __name__ == '__main__':
 	# parameters = None
 	# normalize = False
 	# p_type = 'binary2'
+	# out_fname = 'dap_sun.pickle'
+	# print('SUN data ...', p_type)
 	#############################
 
 	## Downsample the data: reduce the no. of instances per class
