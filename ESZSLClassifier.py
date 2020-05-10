@@ -174,7 +174,7 @@ class ESZSL(BaseEstimator):
 			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
 			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
 		Return:
-			* A 1D np.ndarray of class labels [0, 1, ..., z']
+			* A 1D np.ndarray of class labels [0, 1, ..., z'-1]
 		'''		
 		## Assert to call fit first()
 		try:

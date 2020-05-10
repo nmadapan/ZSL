@@ -1,20 +1,22 @@
 '''
 	This file implements a zero-shot learning (ZSL) classifier 
-	known as ESZSL (Embarassingly simple approach to zero-shot
-	learning) proposed by Bernardino et al. 
+	known as DAP (Direct Attribute Prediction) proposed by 
+	Lampert et al. in 2009 and 2014. 
 
-	The class, ESZSL is implemented in a format similar to 
+	The class, DAP is implemented in a format similar to 
 	standard scikit learn packages, except that, in addition to
 	class labels, you should pass a semantic description (SD)
 	matrix as well. 
 
 	NOTE: You CAN NOT use this model directly with other scikit-
 	learn packages such as sklearn.model_selection.GridSearchCV
-	and sklearn.pipeline.Pipeline as scikit-learn has no good 
+	and sklearn.pipeline.Pipeline in scikit-learn has no good 
 	way to pass both class labels and semantic description 
 	matrix to methods such as predict(), score() etc. However, 
 	you can pass additional arguments (using **kwargs) to
-	fit() method. 
+	fit() method. Hence, in this repository, you will find
+	modules such as GridSearchCV that are customized to ZSL
+	while following the standards of scikit-learn.
 
 	Notations:
 		* n - No. of instances of seen classes
@@ -22,38 +24,29 @@
 		* a - No. of attributes/ descriptors
 		* z - No. of seen classes
 		* X (n x d) - Input data matrix
-		* K (n x n) - Kernel matrix
 		* S (z x a) - SD matrix of seen classes
-		* Y (n x z) - One hot output matrix
-		* A (n x a) - Weight matrix
 
-	Closed form solution using ESZSL:
-		* $$ A = (K^T * K + \gamma I)^-1 XYS^T (SS^T + \lambda I)^-1 $$
-		* $\gamma$ and $\lambda$ are hyperparameters. 
-
-	Input to Attributes:
-		* $$ S' = A^T K^T $$
-
-	Input to classes:
-		* $$ Y' = S A^T K^T $$
+	In DAP, you will train a binary classifier or regressor for each
+	descriptor separately. Hence, there will be $a$ classifiers or
+	regressors. Support Vector Machines (SVM) classifier and 
+	regressor is used in this file. This implementation expects a
+	customized SVM classifier/regressor (refer to SVMClassifier.py
+	or SVMRegressor.py).
 
 	Code adapted from: 
-		* https://github.com/nmadapan/Embarrassingly-simple-ZSL.git
-		* https://github.com/nmadapan/ESZSL.git
+		* https://github.com/chcorbi/AttributeBasedTransferLearning.git
 
 	Link to the paper:
-		* http://proceedings.mlr.press/v37/romera-paredes15.pdf
+		* https://hannes.nickisch.org/papers/articles/lampert13attributes.pdf
 
 	Author: Naveen Madapana
 	Updated: 10 May 2020
 '''
 
 import sys
-from os.path import join
+from os.path import join, basename
 import pickle
 from time import time
-
-from copy import deepcopy
 
 import numpy as np
 from sklearn.metrics.pairwise import polynomial_kernel
@@ -65,18 +58,33 @@ from utils import *
 from SVMClassifier import *
 
 class DAP(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100, clamp = 3., rs = None):
+	def __init__(self, skewedness=3., n_components=85, C=100, clamp = 2.9, rs = None):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
 				get_params() and set_params() functions. 
+			* Before performing zero shot learning, the Chi2 kernel is estimated
+				as suggested in the  original paper. We use the following 
+				sklearn module: sklearn.kernel_approximation.SkewedChi2Sampler. 
+				This module requires skewedness and n_components as parameters. 
+			* Note that the values of initial raw features passed to the 
+				SkewedChi2Sampler can not be greater than skewedness value. 
+				Hence, the raw data is first normalized and then, clipped using
+				clamp on both positive and negative directions. 
 		Input parameters:
-			lambdap: Regularization parameter for kernel/feature space
-			sigmap: Regularization parameter for Attribute Space
-			degree: If integer value, polynomial kernel with that degree
-				is used. If 'precomputed', the input matrix is expected
-				to be a square matrix and it is used directly without
-				computing the kernel. 
+			skewedness: It is a parameter in the Chi2 kernel. 
+			n_components: It is a parameter in the Chi2 kernel. This parameter
+				is equivalent to the no. of features that we want out of the
+				Chi2 kernel. 
+			C: Regularization parameter of the SVM classifier/regressor.
+			clamp: This is the maximum absolute value that the normalized features
+				are constrained to. If the normalized features exceed clamp, 
+				they will be clipped to this value. For instance, if -9 appears 
+				in normalized features, it is modified to -2.9 (the value of clamp).
+			rs: An integer indicating the random_state. This will be passed to the 
+				functions that has randomness involved. If None, then, there is 
+				no random state. The modules with randomness are: SkewedChi2Sampler,
+				SVC, LinearSVC and train_test_split. 
 
 		Order in which GridSearchCV calls functions in scikit-learn:
 			set_params() ==> fit() ==> score()
@@ -87,29 +95,38 @@ class DAP(BaseEstimator):
 		self.n_components = n_components
 		self.C = C
 		self.rs = rs
-		self.clamp = clamp
+		self.clamp = clamp # value of clamp should be less than skewedness
 
-		# Attributes: Modified by fit()
-		# TODO:
+		## Attributes: Modified by fit()
+		# self.S_ = None # (z x a - seen semantic description matrix)
+		## Input data is saved if degree is integer. 
+		## It is used to compute the kernel for testing data.
+		# self.X_ = None
+		# self.clfs_ = [] # (list of $a$ classifiers/regressors)
+
+		## Attributes: Modified by fit() thorugh _update_attributes()
+		# self.classes_ = None # (1D np.ndarray consisting of class indices)
+		# self.num_classes_ = None # (no. of seen classes)
+		# self.num_attr_ = None # (no. of attributes)
+		# self.feature_size_ = None # (dimension of the data)
+		# self.binary_	 = None # (True if S is binary, False otherwise.)
 	
 	def _update_attributes(self, X, S, y):
 		'''
 		Update the following attributes:
-			* classes_ (list of class indices)
+			* classes_ (1D np.ndarray consisting of class indices)
 			* num_classes_ (no. of seen classes)
-			* S_ (z x a - seen semantic description matrix)
 			* num_attr_ (no. of attributes)
 			* feature_size_ (dimension of the data)
+			* binary_ (True if S is binary, False otherwise.)
 		Input arguments:
 			* X (n x d - input data matrix)
 			* S (z x a - semantic description matrix)
 			* y (n x 1 - original class ids)		
 		'''
 		 # Create data specific attributes.
-		self.classes_ = np.unique(y) 
+		self.classes_ = np.unique(y)
 		self.num_classes_ = len(self.classes_)
-		assert S.shape[0] == self.num_classes_, 'Error! No. of classes in S and y are inconsistent.'
-		self.S_ = S
 		self.num_attr_ = S.shape[1]
 		self.feature_size_ = X.shape[1]
 		self.binary_ = is_binary(S)
@@ -120,28 +137,41 @@ class DAP(BaseEstimator):
 			* X (n x d or n x n): 2D np.ndarray - input matrix
 			* S (z x a): 2D np.ndarray - semantic description matrix
 			* y (n x 1): 1D np.ndarray of class label indices.
-		Math:
-			* $$ A = (K^T * K + \gamma I)^-1 XYS^T (SS^T + \lambda I)^-1 $$
 		Attributes created:
+			* S_ (z x a - seen semantic description matrix)
 			* X_ (input data is saved if degree is integer for computing
 				kernel for testing data.)
-			* A_ (weight matrix to transform inputs to SDs)
+			* self.clfs_ (list of $a$ classifiers/regressors)
 		Return:
 			* self
 		'''
-		##TODO: Add assertions here. 
-
+		## Update data attributes
 		self._update_attributes(X, S, y)
-		self.S_ = S
+		self.S_ = S		
 
+		## Assert - sanity checks
+		# The value of clamp can not be greater than skewedness. 
+		if(self.clamp > self.skewedness):
+			raise ValueError('Error! Value of clamp should be less than skewedness.')
+		# No. of classes in S and y should be consistent.
+		assert S.shape[0] == self.num_classes_, 'Error! No. of classes in S and y are inconsistent.'
+		# The values in y should be relative i.e. they should be 0, 1, ..., num_classes_-1
+		if(np.min(y)<0 or np.max(y)>=self.num_classes_):
+			raise ValueError('Error! Class indices in y should be relative: 0, 1, ..., num_classes-1')
+
+		## Initialize classifiers/regressors
 		self.clfs_ = []
 		if(self.binary_):
-			for _ in range(self.num_attr_): self.clfs_.append(SVMClassifier(
-				skewedness=self.skewedness, n_components=self.n_components, C=self.C, clamp = self.clamp, rs = self.rs))
+			for _ in range(self.num_attr_): self.clfs_.append(SVMClassifier(\
+				skewedness=self.skewedness, n_components=self.n_components, \
+				C=self.C, clamp = self.clamp, rs = self.rs))
 		else: 
-			for _ in range(self.num_attr_): self.clfs_.append(SVMRegressor(
-				skewedness=self.skewedness, n_components=self.n_components, C=self.C, clamp = self.clamp, rs = self.rs))
+			for _ in range(self.num_attr_): self.clfs_.append(SVMRegressor(\
+				skewedness=self.skewedness, n_components=self.n_components,\
+				C=self.C, clamp = self.clamp, rs = self.rs))
 
+		## Training data is used for classification/regression, validation data is used 
+		# for platt fitting. 
 		Xplat_train, Xplat_val, aplat_train, aplat_val = train_test_split(\
 			X, S[y, :], test_size=0.10, random_state = self.rs)			
 
@@ -167,8 +197,6 @@ class DAP(BaseEstimator):
 		Input arguments:
 			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
 			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
-		Math:
-			* $$ Y' = S A^T K^T $$
 		Return:
 			* Z: (n' x z') matrix of class scores
 		'''
@@ -189,6 +217,7 @@ class DAP(BaseEstimator):
 			if(self.binary_):
 				a_proba[:,idx] = self.clfs_[idx].predict_proba(X)
 
+		## Estimate output probabilities. Refer to paper. 
 		if(self.binary_):
 			P = a_proba # (n, 85)
 			prior = np.mean(self.S_, axis=0)
@@ -215,7 +244,7 @@ class DAP(BaseEstimator):
 			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
 			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
 		Return:
-			* A 1D np.ndarray of class labels [0, 1, ..., z']
+			* A 1D np.ndarray of class labels [0, 1, ..., z'-1]
 		'''		
 		## Assert to call fit first()
 		try:
@@ -246,37 +275,9 @@ class DAP(BaseEstimator):
 
 		y_pred = self.predict(X, S)
 		return np.mean(y == y_pred)
-
-	# def set_params(self, **parameters):
-	# 	'''
-	# 	Description:
-	# 		* Set the value of parameters of the class. 
-	# 		* Ideally, only the values passed to the __init__ should be modified. 
-	# 	Input arguments:
-	# 		* **parameters is a dictionary whose keys are variables and values are variables' values. 
-	# 	Return:
-	# 		* self
-	# 	'''
-	# 	for parameter, value in parameters.items():
-	# 		setattr(self, parameter, value)
-	# 	return self
-
-	# def get_params(self):
-	# 	'''
-	# 	Description:
-	# 		* Get the value of parameters of the class. 
-	# 		* Only the values passed to the __init__ are returned. 
-	# 	Return:
-	# 		* dictionary: key - variable names, value - variables' values
-	# 	'''
-	# 	dt = deepcopy(self.__dict__)
-	# 	for key, value in self.__dict__.items():
-	# 		if(key.endswith('_')): dt.pop(key)
-	# 	return dt
 		
 if __name__ == '__main__':
 	
-
 	# TODO: How is this data generated. 
 	## AwA
 	# data_dir = './awa_data'
@@ -285,7 +286,6 @@ if __name__ == '__main__':
 	# cut_ratio = 4
 
 	## SUN
-	# from utils import *
 	# data = sun_to_dstruct(base_dir = "./matsun")
 	# cut_ratio = 1
 
@@ -294,15 +294,15 @@ if __name__ == '__main__':
 	classes = ['A', 'B', 'C', 'D', 'E']
 	base_dir = './gesture_data'
 	data = reformat_dstruct(data_path)
-	# normalize = False
+	normalize = False
 	cut_ratio = 1
-	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [50],
-	# 			  'svm__C': [1.]} # [1., 10.]
-	# p_type = 'binary'
-	# out_fname = 'dap_' + basename(data_path)[:-4] + '.pickle'
-	# print('Gesture Data ... ', p_type)
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_' + basename(data_path)[:-4] + '.pickle'
+	print('Gesture Data ... ', p_type)
 	###########################
 
 	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
