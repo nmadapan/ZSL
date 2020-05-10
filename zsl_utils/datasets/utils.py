@@ -288,3 +288,50 @@ def sun_to_dstruct(base_dir, debug = False):
 	if(debug): print_dstruct(data)
 
 	return data
+
+######################################################
+####################### Others #######################
+######################################################
+
+def geseture_to_dstruct(data_path, debug = False):
+	'''
+		Description:
+			Convert the ZSL data file that we have in Windows/Matlab into a
+			format compatible with python DAP codes. 
+		Input:
+			data_path: path to the .mat file. This file has a matlab struct variable 'dstruct'
+				Example: # r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data/data_0.11935.mat'
+		Output: 
+			data: dictionary with the following keys
+				1. seen_data_input: np.ndarray (train_num_instances x feature_size)
+				2. unseen_data_input: np.ndarray (test_num_instances x feature_size)
+				3. seen_data_output: np.ndarray (train_num_instances, )
+				4. unseen_data_output : np.ndarray (test_num_instances, )
+				5. seen_class_ids: np.ndarray (num_seen_classes, )
+				6. unseen_class_ids: np.ndarray (num_unseen_classes, )
+				7. seen_attr_mat: np.ndarray (num_seen_classes, num_attributes)
+				8. unseen_attr_mat: np.ndarray (num_unseen_classes, num_attributes)
+
+	'''
+	x = loadmat(data_path, struct_as_record = False, squeeze_me = True)['dstruct']
+
+	imp_keys = ['unseen_class_ids', 'seen_class_ids', 'seen_data_input', 'unseen_data_input', \
+				'seen_data_output', 'unseen_data_output', 'seen_attr_mat', 'unseen_attr_mat']
+
+	data = {}
+	for key in imp_keys:
+		data[key] = getattr(x, key)
+	del x
+
+	data['seen_data_input'] = data['seen_data_input'].astype(np.float)
+	data['unseen_data_input'] = data['unseen_data_input'].astype(np.float)
+
+	data['seen_data_output'] = data['seen_data_output'].astype(np.uint8) - 1 # Matlab indices start from 1
+	data['unseen_data_output'] = data['unseen_data_output'].astype(np.uint8) - 1 # Matlab indices start from 1
+	
+	data['seen_class_ids'] = data['seen_class_ids'].astype(np.uint8) - 1 # Matlab indices start from 1
+	data['unseen_class_ids'] = data['unseen_class_ids'].astype(np.uint8) - 1 # Matlab indices start from 1
+
+	if(debug): print_dstruct(data)
+
+	return data
