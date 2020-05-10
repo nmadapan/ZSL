@@ -2,11 +2,19 @@
 This code processes the Animal With Attributes Dataset and creates
 the data in the standard format. 
 
+Dataset:
+	1. Download the data from
+		http://www.ist.ac.at/~chl/AwA/AwA-features-vgg19.tar.bz2
+	2. Unzip the AwA-features-vgg19.tar.bz2. It will create a directory
+		'Features' containing the folder 'vgg19'.
+	3. Copy paste the 'vgg19' directory to any folder and give this 
+		module the path to the folder containing 'vgg19' directory. 
+
 How to run:
 	get_data(data_path, debug = False, use_pickle = True, rerun = False)
 	# data_path: path pointing to the directory containing 'vgg19' folder. 
 
-Updated from: https://github.com/chcorbi/AttributeBasedTransferLearning.git
+Adapted from: https://github.com/chcorbi/AttributeBasedTransferLearning.git
 
 Author: Naveen Madapana. 
 '''
@@ -24,7 +32,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 ## Custom modules
-from .awa_utils import *
+from .utils import *
 
 def createFeaturesVector(path, feat_shape=4096, debug = False, rerun = False):
 	'''
@@ -174,19 +182,21 @@ def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 	createFeaturesVector(join(data_path, 'vgg19/'), feat_shape=4096, debug = debug, rerun = rerun)
 	
 	# Training classes
-	print ('#### Concatenating training data....')
+	if(debug): print ('#### Concatenating training data....')
 	trainclasses = loadstr(join(data_path, 'trainclasses.txt'))
 	concatenate_set_features(data_path, trainclasses, 'train', debug = debug, rerun = rerun)
 
 	# Test classes
-	print ('#### Concatenating test data....')
+	if(debug): print ('#### Concatenating test data....')
 	testclasses = loadstr(join(data_path, 'testclasses.txt'))
 	concatenate_set_features(data_path, testclasses, 'test', debug = debug, rerun = rerun)
 
 	## Re-organiz the data in the standard format.
-	data = awa_to_dstruct(data_path, predicate_type = 'binary')
+	data = awa_to_dstruct(data_path, predicate_type = 'binary', debug = debug)
 	
 	## Save the data into a pickle so we do not need to re-run everything again. 
 	if(use_pickle):
 		with open(join(data_path, 'data.pickle'), 'wb') as fp:
 			cPickle.dump({'data': data}, fp)
+
+	return data

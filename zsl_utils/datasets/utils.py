@@ -92,7 +92,37 @@ def autolabel(rects, ax):
 			ha='center', va='bottom', rotation=90)
 
 
-def awa_to_dstruct(data_path, predicate_type = 'binary'):
+def awa_to_dstruct(data_path, predicate_type = 'binary', debug = False):
+	'''
+	Description:
+		Converts the AwA dataset in the standard format. 
+	Input Arguments:
+		* base_dir: path pointing to the directory containing following files:
+			1. train_featuresVGG19.pic.bz2
+			2. train_features_index.txt
+			3. test_featuresVGG19.pic.bz2
+			4. test_features_index.txt
+		* predicate_type: type of attributes.
+	Return:
+		* data: A dictionary with following keys and values:
+			keys - value pairs:
+			1. seen_class_ids - 1D np.ndarray of seen class ids.
+				(#seen_classes, )
+			2. unseen_class_ids - 1D np.ndarray of unseen class ids.
+				(#unseen_classes, )
+			3. seen_data_input - 2D np.ndarray of features of seen classes. 
+				(#seen_instances, #features)
+			4. seen_data_output - 1D np.ndarray of re-indexed 
+				class ids of seen instances. (#seen_instances, )
+			4. unseen_data_input - 2D np.ndarray of features of unseen classes. 
+				(#unseen_instances, #features)
+			5. unseen_data_output - 1D np.ndarray of re-indexed 
+				class ids of unseen instances. (#unseen_instances, )
+			6. seen_attr_mat - 2D np.ndarray containing semantic description 
+				of seen classes. (#seen_classes x #attributes)
+			7. unseen_attr_mat - 2D np.ndarray containing semantic description 
+				of unseen classes. (#unseen_classes x #attributes)	
+	'''	
 
 	# Get features index to recover samples
 	train_index = bzUnpickle(join(data_path, 'CreatedData/train_features_index.txt'))
@@ -103,18 +133,18 @@ def awa_to_dstruct(data_path, predicate_type = 'binary'):
 	test_attributes = get_class_attributes(data_path, name='test', predicate_type=predicate_type)
 
 	# Create training Dataset
-	print ('Creating training dataset...')
+	if(debug): print ('Creating training dataset...')
 	X_train, y_train = create_data(join(data_path, 'CreatedData/train_featuresVGG19.pic.bz2'),train_index, train_attributes)
 	
 	# Convert from sparse to dense array
-	print ('X_train to dense...')
+	if(debug): print ('X_train to dense...')
 	X_train = X_train.toarray()
 
-	print ('Creating test dataset...')
+	if(debug): print ('Creating test dataset...')
 	X_test, y_test = create_data(join(data_path, 'CreatedData/test_featuresVGG19.pic.bz2'),test_index, test_attributes)
 
 	# Convert from sparse to dense array
-	print ('X_test to dense...')
+	if(debug): print ('X_test to dense...')
 	X_test = X_test.toarray()    
 
 	classnames = loadstr(join(data_path, 'classes.txt'), nameonly)
@@ -147,6 +177,8 @@ def awa_to_dstruct(data_path, predicate_type = 'binary'):
 	data['seen_attr_mat'] = train_attributes
 	data['unseen_attr_mat'] = test_attributes
 
+	if(debug): print_dstruct(data)
+
 	return data
 
 ######################################################
@@ -171,3 +203,88 @@ def print_dict(dict_inst, idx = 1):
 			if(isinstance(value, np.ndarray)):
 				print(value.shape)
 			else: print(value)
+
+def print_dstruct(data):
+	print('######################')
+	print('### Seen Classes ###')
+	print('Seen data input: ', data['seen_data_input'].shape)
+	print('Seen data output: ', data['seen_data_output'].shape)
+	print('Seen attribute matrix:', data['seen_attr_mat'].shape)
+	print('Seen class IDs:', data['seen_class_ids'].shape)
+
+	print('### Unseen Classes ###')
+	print('Uneen data input: ', data['unseen_data_input'].shape)
+	print('Unseen data output: ', data['unseen_data_output'].shape)
+	print('Unseen attribute matrix:', data['unseen_attr_mat'].shape)
+	print('Unseen class IDs:', data['unseen_class_ids'].shape)
+	print('######################\n')
+
+#####################################################
+####################### SUN Data ####################
+#####################################################
+
+def sun_to_dstruct(base_dir, debug = False):
+	'''
+	Description:
+		Converts the SUN dataset in the standard format. 
+	Input Arguments:
+		* base_dir: path pointing to the directory containing following	.mat files:
+			1. attrClasses.mat
+			2. experimentIndices.mat
+			3. kernel.mat
+			4. perclassattributes.mat
+	Return:
+		* data: A dictionary with following keys and values:
+			keys - value pairs:
+			1. seen_class_ids - 1D np.ndarray of seen class ids.
+				(#seen_classes, )
+			2. unseen_class_ids - 1D np.ndarray of unseen class ids.
+				(#unseen_classes, )
+			3. seen_data_input - 2D np.ndarray of features of seen classes. 
+				(#seen_instances, #features)
+			4. seen_data_output - 1D np.ndarray of re-indexed 
+				class ids of seen instances. (#seen_instances, )
+			4. unseen_data_input - 2D np.ndarray of features of unseen classes. 
+				(#unseen_instances, #features)
+			5. unseen_data_output - 1D np.ndarray of re-indexed 
+				class ids of unseen instances. (#unseen_instances, )
+			6. seen_attr_mat - 2D np.ndarray containing semantic description 
+				of seen classes. (#seen_classes x #attributes)
+			7. unseen_attr_mat - 2D np.ndarray containing semantic description 
+				of unseen classes. (#unseen_classes x #attributes)	
+	'''
+
+	kf = join(base_dir,"kernel.mat")
+	expidxf = join(base_dir,"experimentIndices.mat")
+	sf = join(base_dir,"attrClasses.mat")
+
+	expidx = loadmat(expidxf)
+	tridx = expidx['trainInstancesIndices'].flatten()-1
+	Ytr = expidx['trainInstancesLabels'].flatten()-1
+	Citr = expidx['trainClassesIndices'].flatten()-1
+	ttidx = expidx['testInstancesIndices'].flatten()-1
+	Ytt = expidx['testInstancesLabels'].flatten()-1
+	Citt = expidx['testClassesIndices'].flatten()-1
+
+	S = loadmat(sf)['attrClasses']
+	Str = S[Citr,:]
+	Stt = S[Citt,:]
+
+	K = loadmat(kf)['K']
+	Ktt = K[ttidx][:,tridx]
+	K = K[tridx][:,tridx]
+
+	## Reformatting the data
+	data = {}
+	data['seen_class_ids'] = Citr
+	data['unseen_class_ids'] = Citt
+	data['seen_data_input'] = K
+	data['seen_data_output'] = Ytr
+	data['unseen_data_input'] = Ktt
+	data['unseen_data_output'] = Ytt
+	data['seen_attr_mat'] = Str
+	data['unseen_attr_mat'] = Stt
+
+	if(debug): print_dstruct(data)
+
+	return data
