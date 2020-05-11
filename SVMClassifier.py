@@ -4,7 +4,6 @@ from sklearn.svm import LinearSVC, SVC
 from sklearn.kernel_approximation import SkewedChi2Sampler
 from sklearn.base import BaseEstimator
 from platt import SigmoidTrain, SigmoidPredict
-from sklearn.metrics import roc_auc_score
 from sklearn.dummy import DummyClassifier
 
 from utils import CustomScaler

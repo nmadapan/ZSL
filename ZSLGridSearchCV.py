@@ -40,12 +40,9 @@ import sys
 from os.path import join, dirname
 import pickle
 import random
-from copy import deepcopy
 
 ## Numpy and Sklearn
 import numpy as np
-from sklearn.metrics.pairwise import polynomial_kernel
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ParameterGrid
 
 class ZSLGridSearchCV():
@@ -369,13 +366,13 @@ if __name__ == '__main__':
 
 	print('Training ... ')
 
-	# from DAPClassifier import DAP as NN
+	# from DAP import DAP as NN
 	# model = NN(clamp = 3.1)
 	# param_dict = {'skewedness': [4., 6., 10.],
 	# 			  'n_components': [40, 50],
 	# 			  'C': [1., 10.]}
 
-	from IAPClassifier import IAP as NN
+	from IAP import IAP as NN
 	model = NN(clamp = 3.1)
 	param_dict = {'skewedness': [4., 6., 10.],
 				  'n_components': [40, 50],

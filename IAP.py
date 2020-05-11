@@ -1,330 +1,271 @@
 '''
-	This script has a class (IAP) that facilitates attribute prediction
-	using Indirect Attribute Prediction (IAP) approach proposed by 
+	This file implements a zero-shot learning (ZSL) classifier 
+	known as IAP (Indirect Attribute Prediction) proposed by 
 	Lampert et al. in 2009 and 2014. 
 
-	It is adapted from the GitHub repository of Charles. 
-	https://github.com/chcorbi/AttributeBasedTransferLearning.git
+	The class, IAP is implemented in a format similar to 
+	standard scikit learn packages, except that, in addition to
+	class labels, you should pass a semantic description (SD)
+	matrix as well. 
+
+	NOTE: You CAN NOT use this model directly with other scikit-
+	learn packages such as sklearn.model_selection.GridSearchCV
+	and sklearn.pipeline.Pipeline in scikit-learn has no good 
+	way to pass both class labels and semantic description 
+	matrix to methods such as predict(), score() etc. However, 
+	you can pass additional arguments (using **kwargs) to
+	fit() method. Hence, in this repository, you will find
+	modules such as GridSearchCV that are customized to ZSL
+	while following the standards of scikit-learn.
+
+	Notations:
+		* n - No. of instances of seen classes
+		* d - Dimension of the data
+		* a - No. of attributes/ descriptors
+		* z - No. of seen classes
+		* X (n x d) - Input data matrix
+		* S (z x a) - SD matrix of seen classes
+
+	In IAP, you will train a multi-class SVM classifier. This trained
+	classifier is used to predict the probabilities of instances
+	of unseen classes belonging to the seen classes. Then, you will
+	map these probabilities to attribute probabilities, and thereby
+	estimate the probability of these instances belonging to the
+	unseen classes. This implementation expects a customized
+	SVM classifier (refer to SVMClassifier.py).
+
+	Code adapted from: 
+		* https://github.com/chcorbi/AttributeBasedTransferLearning.git
+
+	Link to the paper:
+		* https://hannes.nickisch.org/papers/articles/lampert13attributes.pdf
 
 	Author: Naveen Madapana
+	Updated: 10 May 2020
 '''
 
-import os, sys
-from os.path import isdir, join, basename, dirname
+import sys
+from os.path import join, dirname
+import pickle
 from time import time
-import random
-import pickle 
 
-# NumPy and plotting
 import numpy as np
-import matplotlib.pyplot as plt
+from sklearn.base import BaseEstimator
+from sklearn.metrics import accuracy_score
 
-## Scipy and sklearn
-from scipy.io import loadmat, savemat
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.svm import SVR
-from sklearn.metrics import roc_curve, auc, f1_score, make_scorer, roc_auc_score, accuracy_score
-from sklearn.exceptions import ConvergenceWarning
-
-## Custom modules
-from utils import *
-from zsl_utils import *
+from utils import is_binary
 from SVMClassifier import SVMClassifierIAP
-from SVMRegressor import SVMRegressorIAP
 
-import warnings
-warnings.filterwarnings('ignore')
-# GridSearchCV prints warnings irrespective. 
-
-class IAP(object):
-	def __init__(self, data_dict, predicate_type = 'binary', rs = None, normalize = True, base_dir = '.'):
+class IAP(BaseEstimator):
+	def __init__(self, skewedness=3., n_components=85, C=100, 
+							clamp = 2.9, rs = None, debug = False):
 		'''
-			data_dict:
-				A dictionary with the following keys:
-					1. seen_data_input: np.ndarray (train_num_instances x feature_size)
-					2. unseen_data_input: np.ndarray (test_num_instances x feature_size)
-					3. seen_data_output: np.ndarray (train_num_instances, )
-					4. unseen_data_output : np.ndarray (test_num_instances, )
-					5. seen_class_ids: np.ndarray (num_seen_classes, )
-					6. unseen_class_ids: np.ndarray (num_unseen_classes, )
-					7. seen_attr_mat: np.ndarray (num_seen_classes, num_attributes)
-					8. unseen_attr_mat: np.ndarray (num_unseen_classes, num_attributes)				
-			predicate_type:
-				A string. For instance, it can be 'binary'. 
-				If it is binary, we will use a classifier, otherwise, we will use a regressor. 
-			rs:
-				An integer indicating the random_state. This will be passed to the 
+		Description:
+			* This class inherits BaseEstimator which defines 
+				get_params() and set_params() functions. 
+			* Before performing zero shot learning, the Chi2 kernel is estimated
+				as suggested in the  original paper. We use the following 
+				sklearn module: sklearn.kernel_approximation.SkewedChi2Sampler. 
+				This module requires skewedness and n_components as parameters. 
+			* Note that the values of initial raw features passed to the 
+				SkewedChi2Sampler can not be greater than skewedness value. 
+				Hence, the raw data is first normalized and then, clipped using
+				clamp on both positive and negative directions. 
+		Input parameters:
+			skewedness: It is a parameter in the Chi2 kernel. 
+			n_components: It is a parameter in the Chi2 kernel. This parameter
+				is equivalent to the no. of features that we want out of the
+				Chi2 kernel. 
+			C: Regularization parameter of the SVM classifier/regressor.
+			clamp: This is the maximum absolute value that the normalized features
+				are constrained to. If the normalized features exceed clamp, 
+				they will be clipped to this value. For instance, if -9 appears 
+				in normalized features, it is modified to -2.9 (the value of clamp).
+			rs: An integer indicating the random_state. This will be passed to the 
 				functions that has randomness involved. If None, then, there is 
-				no random state. 
+				no random state. The modules with randomness are: SkewedChi2Sampler,
+				SVC, LinearSVC and train_test_split. 
+			debug: if True, print statements are activated. 
+
+		Order in which GridSearchCV calls functions in scikit-learn:
+			set_params() ==> fit() ==> score()
 		'''
+
+		## Parameters
+		self.skewedness = skewedness
+		self.n_components = n_components
+		self.C = C
 		self.rs = rs
-		self.predicate_type = predicate_type
-		self.binary = (predicate_type == 'binary')
-		self.base_dir = base_dir
+		self.clamp = clamp # value of clamp should be less than skewedness
+		self.debug = debug	
 
-		## Write the files and results into this directory
-		self.write_dir = join(base_dir, 'IAP_' + self.predicate_type)
-		try:
-			if(not isdir(self.write_dir)): os.makedirs(self.write_dir)
-		except Exception as exp: 
-			print(exp)
+		## Attributes: Modified by fit()
+		# self.S_ = None # (z x a - seen semantic description matrix)
+		## Input data is saved if degree is integer. 
+		## It is used to compute the kernel for testing data.
+		# self.X_ = None
+		# self.clfs_ = [] # (list of $a$ classifiers/regressors)
 
-		self.requirements() # Prints data requirements
+		## Attributes: Modified by fit() thorugh _update_attributes()
+		# self.classes_ = None # (1D np.ndarray consisting of class indices)
+		# self.num_classes_ = None # (no. of seen classes)
+		# self.num_attr_ = None # (no. of attributes)
+		# self.feature_size_ = None # (dimension of the data)
+		# self.binary_	 = None # (True if S is binary, False otherwise.)
 
-		## Variables updated  by a call to initialize_data_vars()
-		self.seen_data_input, self.seen_data_output = None, None
-		self.seen_attr_mat, self.unseen_attr_mat = None, None
-		self.seen_class_ids, self.unseen_class_ids = None, None
-		self.unseen_data_input, self.unseen_data_output = None, None
-		self.num_seen_classes, self.num_unseen_classes = None, None
-		self.X_train, self.y_train = None, None
-		self.X_test, self.y_test = None, None
-		self.clf = None
-		self.num_attr = None
-
-		## Variables udpated by a call to preprocess()
-		self.seen_mean, self.seen_std = None, None
-
-		## Variables updated by fit(): For unseen data
-		self.y_pred = None # Predicted scores of attributes
-		self.y_proba = None # Predicted probabilities of attributes
-
-		## Variables updated by a call to evaluate(): All variables are for unseen data
-		self.confusion_matrix = None # np.ndarray of shape (num_unseen_classes x num_unseen_classes)
-		# probabilities of unseen classes. np.ndarray of shape (num_unseen_classes x num_unseen_classes)
-		self.class_prob_matrix = None 
-		self.a_proba = None # Attribute probabilities. np.ndarray of shape (num_unseen_samples x num_attr)
-
-		## Variables updated by generate_results
-		self.class_auc = None # AUC of each class. 1D np.ndarray of shape (num_unseen_classes, )
-		# list of false positive and true positives of each class. List of size (num_unseen_classes, )
-		# Each element is a 2D np.ndarray of shape (_, 2). 
-		# 1st col - false positives, 2nd col - true positives.
-		self.unseen_class_roc_curve = None
-		self.unseen_attr_auc = None # AUC of each attribute. 1D np.ndarray of shape (num_attr, )
-
-
-		self.initialize_data_vars(data_dict)
-
-	def pprint(self):
-		print('######################')
-		print('### Seen Classes ###')
-		print('No. of seen classes: ', self.num_seen_classes)
-		print('Seen data input: ', self.seen_data_input.shape)
-		print('Seen data output: ', self.seen_data_output.shape)
-		print('Seen attribute matrix:', self.seen_attr_mat.shape)
-		print('Seen class IDs:', self.seen_class_ids.shape)
-
-		print('### Unseen Classes ###')
-		print('No. of unseen classes: ', self.num_unseen_classes)
-		print('Uneen data input: ', self.unseen_data_input.shape)
-		print('Unseen data output: ', self.unseen_data_output.shape)
-		print('Unseen attribute matrix:', self.unseen_attr_mat.shape)
-		print('Unseen class IDs:', self.unseen_class_ids.shape)
-		print('######################\n')
-
-	def requirements(self):
-		print('######################')
-		print('data dictionary should contain 8 np.ndarray variables. ')
-		print('###### Seen Classes ###')
-		print('1. seen_data_input: (#train_samples x #features)')
-		print('2. seen_data_output: (#train_samples, )')
-		print('3. seen_attr_mat: (#seen_classes, #attributes)')
-		print('4. seen_class_ids: (#seen_classes, )')
-
-		print('\n###### Uneen Classes ###')
-		print('5. unseen_data_input: (#test_samples x #features)')
-		print('6. unseen_data_output: (#test_samples, )')
-		print('7. unseen_attr_mat: (#unseen_classes, #attributes)')
-		print('8. unseen_class_ids: (#unseen_classes, )')
-		print('######################\n')
-
-	def initialize_data_vars(self, data_dict):
-		## Seen Unseen data I/O
-		self.seen_data_input = data_dict['seen_data_input']
-		self.seen_data_output = data_dict['seen_data_output']
-		self.unseen_data_input = data_dict['unseen_data_input']
-		self.unseen_data_output = data_dict['unseen_data_output']
-		
-		self.seen_attr_mat = data_dict['seen_attr_mat']
-		self.unseen_attr_mat = data_dict['unseen_attr_mat']
-
-		self.seen_class_ids = data_dict['seen_class_ids']
-		self.unseen_class_ids = data_dict['unseen_class_ids']
-		
-		self.num_attr = self.seen_attr_mat.shape[1]
-		self.num_seen_classes = self.seen_attr_mat.shape[0]
-		self.num_unseen_classes = self.unseen_attr_mat.shape[0]
-
-		## Create training Dataset
-		print ('Creating training dataset...')
-		self.X_train = self.seen_data_input
-		self.y_train = self.seen_data_output
-
-		## Create testing Dataset
-		print ('Creating test dataset...')
-		self.X_test = self.unseen_data_input
-		self.y_test = self.unseen_data_output
-
-		if(normalize):
-			self.X_train, self.X_test = self.preprocess(self.X_train, self.X_test, clamp_thresh = 3.0)
-		
-		# Irrespective of 'binary' true or false, we should do classification first. 
-		self.clf = SVMClassifierIAP(rs = self.rs)
-
-		self.pprint()
-
-	def _clear_data_vars(self):
-		self.X_train, self.y_train = None, None
-		self.X_test, self.y_test = None, None
-		self.seen_data_input, self.seen_data_output = None, None
-		self.unseen_data_input = None # self.unseen_data_output is not None
-		self.y_pred, self.y_proba = None, None
-
-	def save(self, fname):
-		self._clear_data_vars()
-		with open(join(self.write_dir, fname), 'wb') as fp:
-			pickle.dump({'self': self}, fp)
-
-	def preprocess(self, seen_in, unseen_in, clamp_thresh = 3.):
+		## Attributes: Modified by decision_function()
+		# self.class_prob_ = None # class probability matrix.
+		# self.attr_prob_ = None # attribute probability matrix.
+	
+	def _update_attributes(self, X, S, y):
 		'''
-			Description:
-				Does mean normalization and clamping. 
-			Inputs:
-				seen_in: np.ndarray (num_seen_samples x num_features)
-				unseen_in: np.ndarray (num_unseen_samples x num_features)
-			Returns
-				seen_in: np.ndarray (num_seen_samples x num_features)
-				unseen_in: np.ndarray (num_unseen_samples x num_features)
+		Update the following attributes:
+			* classes_ (1D np.ndarray consisting of class indices)
+			* num_classes_ (no. of seen classes)
+			* num_attr_ (no. of attributes)
+			* feature_size_ (dimension of the data)
+			* binary_ (True if S is binary, False otherwise.)
+		Input arguments:
+			* X (n x d - input data matrix)
+			* S (z x a - semantic description matrix)
+			* y (n x 1 - original class ids)		
 		'''
-		seen_mean = np.mean(seen_in, axis = 0)
-		seen_std = np.std(seen_in, axis = 0)
-		
-		## Mean normalization
-		seen_in -= seen_mean
-		seen_in /= seen_std
-		## Clamping
-		seen_in[seen_in > clamp_thresh] = clamp_thresh
-		seen_in[seen_in < -1 * clamp_thresh] = -1 * clamp_thresh
-		
-		## Mean normalization
-		unseen_in -= seen_mean
-		unseen_in /= seen_std
-		## Clamping
-		unseen_in[unseen_in > clamp_thresh] = clamp_thresh
-		unseen_in[unseen_in < -1 * clamp_thresh] = -1 * clamp_thresh
+		 # Create data specific attributes.
+		self.classes_ = np.unique(y)
+		self.num_classes_ = len(self.classes_)
+		self.num_attr_ = S.shape[1]
+		self.feature_size_ = X.shape[1]
+		self.binary_ = is_binary(S)
 
-		self.seen_mean = seen_mean
-		self.seen_std = seen_std
+	def fit(self, X, S, y):
+		'''
+		Input arguments:
+			* X (n x d or n x n): 2D np.ndarray - input matrix
+			* S (z x a): 2D np.ndarray - semantic description matrix
+			* y (n x 1): 1D np.ndarray of class label indices.
+		Attributes created:
+			* S_ (z x a - seen semantic description matrix)
+			* X_ (input data is saved if degree is integer for computing
+				kernel for testing data.)
+			* self.clfs_ (list of $a$ classifiers/regressors)
+		Return:
+			* self
+		'''
+		## Update data attributes
+		self._update_attributes(X, S, y)
+		self.S_ = S		
 
-		return seen_in, unseen_in
+		## Assert - sanity checks
+		# The value of clamp can not be greater than skewedness. 
+		if(self.clamp > self.skewedness):
+			raise ValueError('Error! Value of clamp should be less than skewedness.')
+		# No. of classes in S and y should be consistent.
+		assert S.shape[0] == self.num_classes_, 'Error! No. of classes in S and y are inconsistent.'
+		# The values in y should be relative i.e. they should be 0, 1, ..., num_classes_-1
+		if(np.min(y)<0 or np.max(y)>=self.num_classes_):
+			raise ValueError('Error! Class indices in y should be relative: 0, 1, ..., num_classes-1')
 
-	def train(self, model, x_train, y_train, cv_parameters = None):
-		# Binary classification with cross validation
-		if(cv_parameters is None): 
-			model.fit(x_train, y_train)
-			return model
-		else:
-			## When n_jobs = None, it is taking slightly more time to 
-			# run than n_jobs = -1 (Equivalent to #processors). However, when n_jobs is -1, 
-			# it prints a lot of ConvergenceWarning by sklearn. 
+		## Initialize classifiers/regressors
+		self.clf_ = SVMClassifierIAP(skewedness=self.skewedness, n_components=self.n_components,\
+							C=self.C, clamp = self.clamp, rs = self.rs)
 
-			## For multi-class case, you can not use roc_auc_score as the output of SVC.predict 
-			# is inconsistent with y_pred expected by the roc_auc_score
-			clf = GridSearchCV(model, cv_parameters, cv = 5, n_jobs = None, \
-								scoring = make_scorer(accuracy_score))
-			clf.fit(x_train, y_train)
-			print(clf.best_params_)
-			return clf.best_estimator_
-
-	def fit(self, cv_parameters = None):
-		y_pred = np.zeros(self.y_test.shape)
-		y_proba = np.zeros((y_pred.shape[0], self.num_seen_classes))
-
-		print('Training model... (takes around 10 min)')
+		if(self.debug): print('Training the model ...')
 		t0 = time()
-		self.clf.clf = self.train(self.clf.clf, self.X_train, self.y_train, cv_parameters)
-		print('Training finished in %.02f secs'%(time() - t0))
+		self.clf_.fit(X, y)
+		if(self.debug): print('Training finished in %.02f secs'%(time() - t0))
 
 		## Train evaluation
-		y_pred_train = self.clf.predict(self.X_train)
-		y_proba_train = self.clf.predict_proba(self.X_train)
-		acc = accuracy_score(self.y_train, y_pred_train)
-		print('Train Accuracy: %.02f'%acc)
-
-		## Testing evaluation
-		y_pred = self.clf.predict(self.X_test)
-		y_proba = self.clf.predict_proba(self.X_test)	
-		print(y_pred.shape, y_proba.shape)	
-		acc = accuracy_score(self.y_test, y_pred)
-		print('Test Accuracy: %.02f'%acc)
-
-		print ('Saving files...')
-		np.savetxt(join(self.write_dir, 'prediction_SVM'), y_pred)
-		np.savetxt(join(self.write_dir, 'probabilities_SVM'), y_proba)
+		y_pred = self.clf_.predict(X)
+		acc = accuracy_score(y, y_pred)
+		if(self.debug): print('Train Accuracy: %.02f'%acc)
 		
-		self.y_pred = y_pred
-		self.y_proba = y_proba
+		return self
+		
+	def decision_function(self, X, S):
+		'''
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+		Attributes:
+			* self.class_prob_ (n' x z'): 2D np.ndarray - class probability matrix.
+			* self.attr_prob_  (n' x a): 2D np.ndarray - attribute probability matrix.		
+		Return:
+			* Z: (n' x z') matrix of class scores
+		'''
 
-		return y_pred, y_proba
+		## Assertions to call fit first()
+		try:
+			_ = self.clf_
+		except AttributeError as exp:
+			print('Error! clfs_ attribute does not exist. Run fit() first. ')
+			raise exp
 
-	def evaluate(self, prob_fpath = None):
-		M = self.unseen_attr_mat # (10,85)
-		prob=[] # (n, 10)
+		y_proba = self.clf_.predict_proba(X)
+		P = np.dot(y_proba, self.S_)
 
-		if(prob_fpath is None): P = self.y_proba # (n, 85)
-		else: P = np.loadtxt(join(self.write_dir, 'probabilities_SVM')) # (n, 85)
-		P = np.dot(P, self.seen_attr_mat) # This is attribute probability matrix. 
-
-		if(self.binary):
-			prior = np.mean(self.seen_attr_mat, axis=0)
+		## Estimate output probabilities. Refer to paper. 
+		prob=[] # (n, a)
+		if(self.binary_):
+			prior = np.mean(self.S_, axis=0)
 			prior[prior==0.] = 0.5
 			prior[prior==1.] = 0.5    # disallow degenerated priors
 			for p in P:
-				prob.append(np.prod(M*p + (1-M)*(1-p),axis=1)/\
-							np.prod(M*prior+(1-M)*(1-prior), axis=1) )			
+				prob.append(np.prod(S*p + (1-S)*(1-p),axis=1)/\
+							np.prod(S*prior+(1-S)*(1-prior), axis=1) )			
 		else:
-			Md = np.copy(M).astype(np.float)
+			Md = np.copy(S).astype(np.float)
 			Md /= np.linalg.norm(Md, axis = 1, keepdims = True)
 			for p in P:
 				p /= np.linalg.norm(p)
 				prob.append(np.dot(Md, p))
 
-		MCpred = np.argmax(prob, axis = 1) # (n, )
-
-		d = self.num_unseen_classes
-		confusion=np.zeros([d, d])
-		for pl, gt in zip(MCpred, self.unseen_data_output):
-			confusion[gt, pl] += 1.
-
-		confusion /= confusion.sum(axis = 1, keepdims = True)
-
-		self.confusion_matrix = confusion
-		self.class_prob_matrix = np.asarray(prob)
-		self.a_proba = P
-
-		return confusion, np.asarray(prob), self.unseen_data_output
-
-	def generate_results(self, classes):
+		## Attributes
+		self.class_prob_ = prob
+		self.attr_prob_ = P
+		return prob
+	
+	def predict(self, X, S):
 		'''
-			Following instance variables are used to generate results:
-			1. self.confusion_matrix
-			2. self.class_prob_matrix
-			3. self.unseen_attr_mat
-			4. self.unseen_data_output
-			5. self.a_proba
+		Description
+			* Predict the class labels of the new classes given their SDs. 
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+		Return:
+			* A 1D np.ndarray of class labels [0, 1, ..., z'-1]
 		'''		
-		wpath = join(self.write_dir, 'AwA-ROC-confusion-IAP-'+p_type+'-SVM.pdf')
-		plot_confusion(self.confusion_matrix, classes, wpath)
+		## Assert to call fit first()
+		try:
+			_ = self.clf_
+		except AttributeError as exp:
+			print('Error! clfs_ attribute does not exist. Run fit() first. ')
+			raise exp
 
-		wpath = join(self.write_dir, 'AwA-ROC-IAP-SVM.pdf')
-		plot_roc(self.class_prob_matrix, self.unseen_data_output, classes, wpath)
+		return np.argmax(self.decision_function(X, S), axis=1)
 
-		wpath = join(self.write_dir, 'AwA-AttAUC-IAP-SVM.pdf')
-		a_test = self.unseen_attr_mat[self.unseen_data_output, :]
-		plot_attAUC(self.a_proba, a_test, wpath)
-		print ("Mean class accuracy %g" % np.mean(np.diag(self.confusion_matrix)*100))
+	def score(self, X, S, y):
+		'''
+		Description
+			* Compute the accuracy after calling fit()
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+			* y (n x 1): 1D np.ndarray of class label indices.
+		Return:
+			* A scalar value. Higher values indicate superior performances. 
+		'''			
+		## Assert to call fit first()
+		try:
+			_ = self.clf_
+		except AttributeError as exp:
+			print('Error! clfs_ attribute does not exist. Run fit() first. ')
+			raise exp
 
+		y_pred = self.predict(X, S)
+		acc = accuracy_score(y, y_pred)
+		if(self.debug): print('Accuracy: %.02f'%acc)
+		return acc
+		
 if __name__ == '__main__':
 	### To test on gestures ###
 	from zsl_utils.datasets import gestures
@@ -370,8 +311,9 @@ if __name__ == '__main__':
 	# out_fname = 'dap_sun.pickle'
 	#############################
 
-	## Downsample the data: reduce the no. of instances per class
 	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
+
+	## Downsample the data: reduce the no. of instances per class
 	new_y_tr = []
 	for idx in np.unique(Y_tr):
 		temp = np.nonzero(Y_tr == idx)[0]
@@ -380,20 +322,26 @@ if __name__ == '__main__':
 	new_y_tr = np.array(new_y_tr)
 	Y_tr = Y_tr[new_y_tr]
 	X_tr = X_tr[new_y_tr, :]
-	data['seen_data_input'], data['seen_data_output'] = X_tr, Y_tr
 
-	iap = IAP(data, predicate_type = p_type, normalize = normalize, base_dir = base_dir)
-	start = time()
-	iap.fit(parameters)
-	print('Total time taken: %.02f secs'%(time()-start))
-	confusion, prob, L = iap.evaluate()
-	iap.generate_results(classes)
-	iap.save(out_fname)
+	print('X_tr: ', X_tr.shape)
+	print('Y_tr: ', Y_tr.shape)
 
-	# with open(join(iap.write_dir, 'full_data.pickle'), 'wb') as fp:
-	# 	pickle.dump({'data': data}, fp)	
+	X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
+	print('X_ts: ', X_ts.shape)
+	print('Y_ts: ', Y_ts.shape)
 
+	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	print('S_tr: ', S_tr.shape)
+	print('S_ts: ', S_ts.shape)
 
-	# with open(join(join(iap.write_dir, 'DAP_'+p_type), out_fname), 'rb') as fp:
-	# 	iap = pickle.load(fp)['self']
-	# iap.generate_results(classes)
+	print('Data Loaded. ')
+	clf = IAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1)
+
+	print('Fitting')
+	clf.fit(X_tr, S_tr, Y_tr)
+
+	print('Predicting on train data')
+	print(clf.score(X_tr, S_tr, Y_tr))
+
+	print('Predicting')
+	print(clf.score(X_ts, S_ts, Y_ts))

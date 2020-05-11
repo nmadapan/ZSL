@@ -210,33 +210,6 @@ class ESZSL(BaseEstimator):
 
 		y_pred = self.predict(X, S)
 		return np.mean(y == y_pred)
-
-	# def set_params(self, **parameters):
-	# 	'''
-	# 	Description:
-	# 		* Set the value of parameters of the class. 
-	# 		* Ideally, only the values passed to the __init__ should be modified. 
-	# 	Input arguments:
-	# 		* **parameters is a dictionary whose keys are variables and values are variables' values. 
-	# 	Return:
-	# 		* self
-	# 	'''
-	# 	for parameter, value in parameters.items():
-	# 		setattr(self, parameter, value)
-	# 	return self
-
-	# def get_params(self):
-	# 	'''
-	# 	Description:
-	# 		* Get the value of parameters of the class. 
-	# 		* Only the values passed to the __init__ are returned. 
-	# 	Return:
-	# 		* dictionary: key - variable names, value - variables' values
-	# 	'''
-	# 	dt = deepcopy(self.__dict__)
-	# 	for key, value in self.__dict__.items():
-	# 		if(key.endswith('_')): dt.pop(key)
-	# 	return dt
 		
 if __name__ == '__main__':
 	### To test on gestures ###
@@ -283,8 +256,21 @@ if __name__ == '__main__':
 	# out_fname = 'dap_sun.pickle'
 	#############################
 
-	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
+	###### To test on awa sae data #######
+	## This is to convert awa data to a compatible format.
+	# from zsl_utils.datasets import awa_sae
+	# print('AwA data ...')
+	# base_dir = './data/awa_sae'
+	# data = awa_sae.get_data(join(base_dir, 'awa_demo_data.mat'), debug = True)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary'
+	# out_fname = 'dap_awa_sae.pickle'
+	#############################
 
+	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
 	## Downsample the data: reduce the no. of instances per class
 	new_y_tr = []
 	for idx in np.unique(y_tr):
@@ -295,16 +281,8 @@ if __name__ == '__main__':
 	y_tr = y_tr[new_y_tr]
 	X_tr = X_tr[new_y_tr, :]
 
-	print('X_tr: ', X_tr.shape)
-	print('y_tr: ', y_tr.shape)
-
 	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
-	print('X_ts: ', X_ts.shape)
-	print('y_ts: ', y_ts.shape)
-
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
-	print('S_tr: ', S_tr.shape)
-	print('S_ts: ', S_ts.shape)
 
 	print('Data Loaded. ')
 	clf = ESZSL(sigmap = 1e1, lambdap = 1e-2, degree = 1)

@@ -46,10 +46,7 @@
 '''
 
 import numpy as np
-import scipy
-import scipy.io
 from scipy.linalg import solve_sylvester
-import argparse
 import sys
 from sklearn.base import BaseEstimator
 from os.path import dirname, join
@@ -247,6 +244,16 @@ def main():
 	#############################
 
 	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
+	## Downsample the data: reduce the no. of instances per class
+	new_y_tr = []
+	for idx in np.unique(y_tr):
+		temp = np.nonzero(y_tr == idx)[0]
+		last_id = int(len(temp)/cut_ratio)
+		new_y_tr += temp[:last_id].tolist()
+	new_y_tr = np.array(new_y_tr)
+	y_tr = y_tr[new_y_tr]
+	X_tr = X_tr[new_y_tr, :]
+
 	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
