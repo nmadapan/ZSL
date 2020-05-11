@@ -232,33 +232,23 @@ def main():
 	# out_fname = 'dap_sun.pickle'
 	# #############################
 
-	# X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
-	# X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
-	# S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	###### To test on awa sae data #######
+	## This is to convert awa data to a compatible format.
+	from zsl_utils.datasets import awa_sae
+	print('AwA data ...')
+	base_dir = './data/awa_sae'
+	data = awa_sae.get_data(join(base_dir, 'awa_demo_data.mat'), debug = True)
+	classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	normalize = False
+	cut_ratio = 1
+	parameters = None
+	p_type = 'binary'
+	out_fname = 'dap_awa_sae.pickle'
+	#############################
 
-	## for AwA dataset: Perfectly works.
-	awa = scipy.io.loadmat('./data/awa_sae/awa_demo_data.mat')
-	train_data = awa['X_tr']
-	test_data = awa['X_te']
-	train_class_attributes_labels_continuous_allset = awa['S_tr']
-	y_ts = awa['test_labels'] # opts.test_labels # 6180 x 1 # absolute ids.
-	y_ts2 = awa['testclasses_id'] # opts.test_classes_id # 10 x 1
-	test_class_attributes_labels_continuous = awa['S_te_gt']
-	## Seen classes
-	X_tr = awa['X_tr'] # n x d
-	S_tr = awa['S_tr'] # n x a
-	S_tr, y_tr = np.unique(S_tr, axis = 0, return_inverse = True) # z x a, nx1
-	print('X_tr: ', X_tr.shape)
-	print('Y_tr: ', y_tr.shape)
-	print('S_tr: ', S_tr.shape)
-	## Unseen classes
-	X_ts = awa['X_te'] # n x d
-	S_ts = awa['S_te_gt'] # z x a
-	y_ts = awa['test_labels'][:np.newaxis] == awa['testclasses_id'][:np.newaxis].T
-	y_ts = np.argmax(y_ts, axis = 1) # n x 1
-	print('X_ts: ', X_ts.shape)
-	print('Y_ts: ', y_ts.shape)
-	print('S_ts: ', S_ts.shape)
+	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
+	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
+	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
 	clf = SAE()
 	clf.fit(X_tr, S_tr, y_tr)

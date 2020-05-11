@@ -80,6 +80,8 @@ def get_data(data_path, debug = False, use_pickle = False, rerun = False):
 	
 	## Re-organiz the data in the standard format.
 	data = sun_to_dstruct(data_path, debug = debug)
+
+	if(debug): print_dstruct(data)
 	
 	## Save the data into a pickle so we do not need to re-run everything again. 
 	if(use_pickle):

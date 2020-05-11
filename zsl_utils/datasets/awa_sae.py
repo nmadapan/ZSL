@@ -1,16 +1,15 @@
 '''
-This code will create the Gesture dataset into
+This code processes the Animal With Attributes Dataset and creates
 the data in the standard format. 
 
 Dataset:
-	* Dataset is generated in Windows system (Naveen)
-	* Copy paste this file into a directory. Provide this module the 
+	1. Download the data from
+		https://drive.google.com/file/d/1l0UVhhIU-SmtJ9hqk7OVOG9zNga9qt_I/view
+	2. Copy paste this file into a directory. Provide this module the 
 		path to this file. 
 
 How to run:
 	get_data(data_path, debug = False, use_pickle = True, rerun = False)
-	* data_path: path pointing to the .mat file created in windows system.
-		For instance: '/home/isat-deep/Desktop/Naveen/fg2020/data/cust_feat_data/data_0.61305.mat'
 
 Author: Naveen Madapana. 
 '''
@@ -26,15 +25,16 @@ import bz2
 
 import numpy as np
 from scipy.sparse import csr_matrix
+from scipy.io import loadmat
 
-from .utils import geseture_to_dstruct, print_dstruct
+## Custom modules
+from .utils import *
 
 ## Main function present in dataset folders. 
 def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 	'''
 	Input arguments:
-		* data_path: path to the .mat file containing the data. 
-			For instance: '/home/isat-deep/Desktop/Naveen/fg2020/data/cust_feat_data/data_0.61305.mat'
+		* data_path: path to the awa_demo_data.mat file containing the data. 
 		* debug: if true, print statements are activated. 
 		* use_pickle: if true, it will use 'data.pickle' variable
 			before re-creating the data. If use_pickle is true, 
@@ -71,7 +71,25 @@ def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 		return data
 	
 	## Re-organiz the data in the standard format.
-	data = geseture_to_dstruct(data_path, debug = debug)
+	awa = loadmat(data_path)
+	train_data = awa['X_tr']
+	test_data = awa['X_te']
+	train_class_attributes_labels_continuous_allset = awa['S_tr']
+	unseen_class_ids = awa['testclasses_id'].flatten() # absolute test class ids.
+	test_class_attributes_labels_continuous = awa['S_te_gt']
+	data = {}
+	## Seen classes
+	data['seen_data_input'] = awa['X_tr'] # n x d
+	S_tr = awa['S_tr'] # n x a
+	data['seen_attr_mat'], data['seen_data_output'] = np.unique(S_tr, axis = 0, return_inverse = True) # z x a, nx1
+	data['seen_class_ids'] = np.array(range(0, data['seen_attr_mat'].shape[0]))
+
+	## Unseen classes
+	data['unseen_data_input'] = awa['X_te'] # n x d
+	data['unseen_attr_mat'] = awa['S_te_gt'] # z x a
+	y_ts = awa['test_labels'][:np.newaxis] == awa['testclasses_id'][:np.newaxis].T
+	data['unseen_data_output'] = np.argmax(y_ts, axis = 1) # n x 1
+	data['unseen_class_ids'] = unseen_class_ids
 
 	if(debug): print_dstruct(data)
 	
