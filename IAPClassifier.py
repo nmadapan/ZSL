@@ -57,7 +57,8 @@ from utils import is_binary
 from SVMClassifier import SVMClassifierIAP
 
 class IAP(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100, clamp = 2.9, rs = None):
+	def __init__(self, skewedness=3., n_components=85, C=100, 
+							clamp = 2.9, rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
@@ -84,6 +85,7 @@ class IAP(BaseEstimator):
 				functions that has randomness involved. If None, then, there is 
 				no random state. The modules with randomness are: SkewedChi2Sampler,
 				SVC, LinearSVC and train_test_split. 
+			debug: if True, print statements are activated. 
 
 		Order in which GridSearchCV calls functions in scikit-learn:
 			set_params() ==> fit() ==> score()
@@ -95,6 +97,7 @@ class IAP(BaseEstimator):
 		self.C = C
 		self.rs = rs
 		self.clamp = clamp # value of clamp should be less than skewedness
+		self.debug = debug	
 
 		## Attributes: Modified by fit()
 		# self.S_ = None # (z x a - seen semantic description matrix)
@@ -166,15 +169,15 @@ class IAP(BaseEstimator):
 		self.clf_ = SVMClassifierIAP(skewedness=self.skewedness, n_components=self.n_components,\
 							C=self.C, clamp = self.clamp, rs = self.rs)
 
-		print('Training the model ...')
+		if(self.debug): print('Training the model ...')
 		t0 = time()
 		self.clf_.fit(X, y)
-		print('Training finished in %.02f secs'%(time() - t0))
+		if(self.debug): print('Training finished in %.02f secs'%(time() - t0))
 
 		## Train evaluation
 		y_pred = self.clf_.predict(X)
 		acc = accuracy_score(y, y_pred)
-		print('Train Accuracy: %.02f'%acc)
+		if(self.debug): print('Train Accuracy: %.02f'%acc)
 		
 		return self
 		
@@ -259,7 +262,9 @@ class IAP(BaseEstimator):
 			raise exp
 
 		y_pred = self.predict(X, S)
-		return accuracy_score(y, y_pred)
+		acc = accuracy_score(y, y_pred)
+		if(self.debug): print('Accuracy: %.02f'%acc)
+		return acc
 		
 if __name__ == '__main__':
 	### To test on gestures ###

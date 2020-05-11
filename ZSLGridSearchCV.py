@@ -37,7 +37,7 @@
 
 ## General
 import sys
-from os.path import join
+from os.path import join, dirname
 import pickle
 import random
 from copy import deepcopy
@@ -47,9 +47,6 @@ import numpy as np
 from sklearn.metrics.pairwise import polynomial_kernel
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ParameterGrid
-
-## Custom modules
-from ESZSLClassifier import ESZSL
 
 class ZSLGridSearchCV():
 	def __init__(self, model, param_dict, cv = 5, rs = None):
@@ -290,7 +287,7 @@ class ZSLGridSearchCV():
 			if(np.mean(score_list) > best_score):
 				best_score = np.mean(score_list)
 				best_params = params
-				print(score_list, best_score)
+				print('Best score: %.02f'%best_score, params)
 
 		self.best_params_ = best_params # Attribute
 		self.best_score_ = best_score # Attribute
@@ -302,19 +299,51 @@ class ZSLGridSearchCV():
 		return model
 
 if __name__ == '__main__':
-	# AwA
-	# data_dir = './awa_data'
+	### To test on gestures ###
+	from zsl_utils.datasets import gestures
+	print('Gesture Data ... ')
+	data_path = r'./data/gesture/data_0.61305.mat'
+	base_dir = dirname(data_path)
+	classes = ['A', 'B', 'C', 'D', 'E']
+	data = gestures.get_data(data_path, debug = True)
+	normalize = False
+	cut_ratio = 1
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_gestures.pickle'
+	###########################
 
-	# Gestures
-	data_dir = './gesture_data'
+	###### To test on awa #######
+	## This is to convert awa data to a compatible format.
+	# from zsl_utils.datasets import awa
+	# print('AwA data ...')
+	# base_dir = './data/awa'
+	# classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
+	# data = awa.get_data(base_dir, debug = True)
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary'
+	# out_fname = 'dap_awa.pickle'
+	#############################
 
-	data_path = join(data_dir, 'full_data.pickle')
+	###### To test on sun #######
+	# from zsl_utils.datasets import sun
+	# print('SUN data ...')
+	# base_dir = './data/matsun'
+	# data = sun.get_data(base_dir, debug = True)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary2'
+	# out_fname = 'dap_sun.pickle'
+	#############################
 
-	with open(data_path, 'rb') as fp:
-		data = pickle.load(fp)['data']
-
-	X_tr = data['seen_data_input']
-	Y_tr = data['seen_data_output']
+	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
 
 	cut_ratio = 4
 	new_y_tr = []
@@ -338,12 +367,27 @@ if __name__ == '__main__':
 	S_tr = data['seen_attr_mat']
 	S_ts = data['unseen_attr_mat']
 
-	lambdap = 1e-2
-	sigmap = 1e1
+	print('Training ... ')
 
-	print('Data Loaded. ')
-	model = ESZSL(sigmap = sigmap, lambdap = lambdap, degree = 1)
-	param_dict = {'sigmap': [1e-2, 1e-1, 1e0, 1e1], 'lambdap': [1e-2, 1e-1, 1e0, 1e1]}
+	# from DAPClassifier import DAP as NN
+	# model = NN(clamp = 3.1)
+	# param_dict = {'skewedness': [4., 6., 10.],
+	# 			  'n_components': [40, 50],
+	# 			  'C': [1., 10.]}
+
+	from IAPClassifier import IAP as NN
+	model = NN(clamp = 3.1)
+	param_dict = {'skewedness': [4., 6., 10.],
+				  'n_components': [40, 50],
+				  'C': [1., 10.]}
+
+	# from ESZSL import ESZSL as NN
+	# model = NN(degree = 1)
+	# param_dict = {'sigmap': [1e-2, 1e-1, 1e0, 1e1], 'lambdap': [1e-2, 1e-1, 1e0, 1e1]}
+
+	# from SAE import SAE as NN
+	# model = NN()
+	# param_dict = {'lambdap': [2e5, 3e5, 4e5, 5e5]}
 
 	clf = ZSLGridSearchCV(model, param_dict)
 	best_model = clf.fit(X_tr, S_tr, Y_tr)

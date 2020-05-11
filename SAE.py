@@ -1,3 +1,50 @@
+'''
+	This file implements a zero-shot learning (ZSL) classifier 
+	known as SAE (Semantic Auto Encoder) proposed by Kodriov et al.
+
+	The class, SAE is implemented in a format similar to 
+	standard scikit learn packages, except that, in addition to
+	class labels, you should pass a semantic description (SD)
+	matrix as well. 
+
+	NOTE: You CAN NOT use this model directly with other scikit-
+	learn packages such as sklearn.model_selection.GridSearchCV
+	and sklearn.pipeline.Pipeline as scikit-learn has no good 
+	way to pass both class labels and semantic description 
+	matrix to methods such as predict(), score() etc. However, 
+	you can pass additional arguments (using **kwargs) to
+	fit() method. 
+
+	Notations:
+		* n - No. of instances of seen classes
+		* d - Dimension of the data
+		* a - No. of attributes/ descriptors
+		* z - No. of seen classes
+		* X (n x d) - Input data matrix
+		* S (z x a) - SD matrix of seen classes
+		* SS (n x a) - SD matrix of all seen instances
+		* Y (n x z) - One hot output matrix
+		* W (a x d) - Weight matrix
+
+	Closed form solution using SAE:
+		* $$ P W + W Q = R $$
+		* $$ P = SS^T SS, Q = \lambda X^T X, R = (1+\lambda) SS^T X $$
+		* P (a x a), Q (d x d), R (a x d), W (a x d)
+		* Solve this Sylvester equation to get the solution. 
+
+	Input to Attributes:
+		* $$ S' = X W^T $$
+
+	Input to classes:
+		* $$ Y' = S X W^T $$
+
+	Link to the paper:
+		* https://arxiv.org/abs/1704.08345
+
+	Author: Naveen Madapana
+	Updated: 10 May 2020
+'''
+
 import numpy as np
 import scipy
 import scipy.io
@@ -6,16 +53,51 @@ import argparse
 import sys
 from sklearn.base import BaseEstimator
 from os.path import dirname, join
+from sklearn.metrics import accuracy_score
 
 class SAE(BaseEstimator):
-	def __init__(self, lambdap = 5e5, rs = None):
+	def __init__(self, lambdap = 5e5, rs = None, debug = False):
+		'''
+		Description:
+			* This class inherits BaseEstimator which defines 
+				get_params() and set_params() functions. 
+		Input parameters:
+			lambdap: Hyper parameter.
+			rs: random seed
+			debug: if True, print statements are activated
+		Order in which GridSearchCV calls functions in scikit-learn:
+			set_params() ==> fit() ==> score()
+		'''
+
 		self.lambdap = lambdap
 		self.rs = rs
+		self.debug = debug
+
+		## Attributes: Created by fit()
+		# self.S_ = None
+		# self.W_ = None
 
 	def _normalize(self, M, axis = 0):
 		return M / (np.linalg.norm(M, axis = axis, keepdims=True) + 1e-10)
 
 	def fit(self, X, S, y):
+		'''
+		Input arguments:
+			* X (n x d or n x n): 2D np.ndarray - input matrix
+			* S (z x a): 2D np.ndarray - semantic description matrix
+			* y (n x 1): 1D np.ndarray of class label indices.
+		Math:
+			* $$ P W + W Q = R $$
+			* $$ P = SS^T SS, Q = \lambda X^T X, R = (1+\lambda) SS^T X $$
+			* P (a x a), Q (d x d), R (a x d), W (a x d)
+			* Solve this Sylvester equation to get the solution. 		
+		Attributes created:
+			* S_ (SD matrix of seen classes)
+			* W_ (weight matrix to transform inputs to SDs)
+		Return:
+			* self
+		'''
+
 		## Assertions here
 		X = self._normalize(X)
 
@@ -28,6 +110,26 @@ class SAE(BaseEstimator):
 		self.S_ = S
 
 	def decision_function(self, X, S):
+		'''
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+		Math:
+			Input to Attributes:
+				* $$ S' = X W^T $$
+			Input to classes:
+				* $$ Y' = S X W^T $$		
+		Return:
+			* Z: (n' x z') matrix of class scores
+		'''		
+
+		## Assert to call fit first()
+		try:
+			_ = self.W_
+		except AttributeError as exp:
+			print('Error! W_ attribute does not exist. Run fit() first. ')
+			raise exp
+		
 		S_pred = np.dot(X, self.W_.T) # N x a
 		# Normalize for cosine similarity
 		S_pred = self._normalize(S_pred, axis = 1)
@@ -38,11 +140,51 @@ class SAE(BaseEstimator):
 		# Normalize each class now # For cosine similarity
 		S = self._normalize(S, axis = 1)
 
-		return np.dot(S_pred, S.T)
+		# Class probabilities
+		Z = np.dot(S_pred, S.T)
+
+		return Z
+
+	def predict(self, X, S):
+		'''
+		Description
+			* Predict the class labels of the new classes given their SDs. 
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+		Return:
+			* A 1D np.ndarray of class labels [0, 1, ..., z'-1]
+		'''		
+
+		## Assert to call fit first()
+		try:
+			_ = self.W_
+		except AttributeError as exp:
+			print('Error! W_ attribute does not exist. Run fit() first. ')
+			raise exp
+		return np.argmax(self.decision_function(X, S), axis = 1)
 
 	def score(self, X, S, y):
-		y_pred = np.argmax(self.decision_function(X, S), axis = 1)
-		return np.mean(y == y_pred)
+		'''
+		Description
+			* Compute the accuracy after calling fit()
+		Input arguments:
+			* X (n' x d or n' x n'): 2D np.ndarray - input matrix for test data
+			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
+			* y (n x 1): 1D np.ndarray of class label indices.
+		Return:
+			* A scalar value. Higher values indicate superior performances. 
+		'''			
+
+		## Assert to call fit first()
+		try:
+			_ = self.W_
+		except AttributeError as exp:
+			print('Error! W_ attribute does not exist. Run fit() first. ')
+			raise exp
+
+		y_pred = self.predict(X, S)
+		return accuracy_score(y, y_pred)
 
 def main():
 
@@ -88,14 +230,14 @@ def main():
 	# parameters = None
 	# p_type = 'binary2'
 	# out_fname = 'dap_sun.pickle'
-	#############################
+	# #############################
 
 	# X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
 	# X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
 	# S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
-	# # for AwA dataset: Perfectly works.
-	awa = scipy.io.loadmat('awa_demo_data.mat')
+	## for AwA dataset: Perfectly works.
+	awa = scipy.io.loadmat('./data/awa_sae/awa_demo_data.mat')
 	train_data = awa['X_tr']
 	test_data = awa['X_te']
 	train_class_attributes_labels_continuous_allset = awa['S_tr']

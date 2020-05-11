@@ -52,14 +52,15 @@ import numpy as np
 from sklearn.metrics.pairwise import polynomial_kernel
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 
 from utils import is_binary
 from SVMClassifier import SVMClassifier
 from SVMRegressor import SVMRegressor
 
 class DAP(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100, clamp = 2.9, rs = None):
+	def __init__(self, skewedness=3., n_components=85, C=100, 
+							clamp = 2.9, rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
@@ -86,6 +87,7 @@ class DAP(BaseEstimator):
 				functions that has randomness involved. If None, then, there is 
 				no random state. The modules with randomness are: SkewedChi2Sampler,
 				SVC, LinearSVC and train_test_split. 
+			debug: if True, print statements are activated. 
 
 		Order in which GridSearchCV calls functions in scikit-learn:
 			set_params() ==> fit() ==> score()
@@ -97,6 +99,7 @@ class DAP(BaseEstimator):
 		self.C = C
 		self.rs = rs
 		self.clamp = clamp # value of clamp should be less than skewedness
+		self.debug = debug
 
 		## Attributes: Modified by fit()
 		# self.S_ = None # (z x a - seen semantic description matrix)
@@ -167,11 +170,13 @@ class DAP(BaseEstimator):
 		## Initialize classifiers/regressors
 		self.clfs_ = []
 		if(self.binary_):
-			for _ in range(self.num_attr_): self.clfs_.append(SVMClassifier(\
+			for _ in range(self.num_attr_): 
+				self.clfs_.append(SVMClassifier(\
 				skewedness=self.skewedness, n_components=self.n_components, \
 				C=self.C, clamp = self.clamp, rs = self.rs))
 		else: 
-			for _ in range(self.num_attr_): self.clfs_.append(SVMRegressor(\
+			for _ in range(self.num_attr_): 
+				self.clfs_.append(SVMRegressor(\
 				skewedness=self.skewedness, n_components=self.n_components,\
 				C=self.C, clamp = self.clamp, rs = self.rs))
 
@@ -181,19 +186,19 @@ class DAP(BaseEstimator):
 			X, S[y, :], test_size=0.10, random_state = self.rs)			
 
 		for idx in range(self.num_attr_):
-			print ('--------- Attribute %d/%d ---------' % (idx+1, self.num_attr_))
+			if(self.debug): print ('---- Attribute %d/%d ----' % (idx+1, self.num_attr_))
 			t0 = time()
 
 			# Training and do hyper-parameter search
 			self.clfs_[idx].fit(Xplat_train, aplat_train[:,idx])
-			print ('Fitted classifier in: %fs' % (time() - t0))
+			if(self.debug): print ('Fitted classifier in: %fs' % (time() - t0))
 			a_pred_train = self.clfs_[idx].predict(Xplat_train)
 			if(self.binary_):
 				## Training data
 				self.clfs_[idx].set_platt_params(Xplat_val, aplat_val[:,idx])
 				f1_score_c0 = f1_score(aplat_train[:, idx], a_pred_train, pos_label = 0)
 				f1_score_c1 = f1_score(aplat_train[:, idx], a_pred_train, pos_label = 1)
-				print('Train F1 scores: %.02f, %.02f'%(f1_score_c0, f1_score_c1))			
+				if(self.debug): print('Train F1 scores: %.02f, %.02f'%(f1_score_c0, f1_score_c1))			
 		
 		return self
 		
@@ -286,7 +291,9 @@ class DAP(BaseEstimator):
 			raise exp
 
 		y_pred = self.predict(X, S)
-		return np.mean(y == y_pred)
+		acc = accuracy_score(y, y_pred)
+		if(self.debug): print('Accuracy: %.02f '%acc)
+		return acc
 		
 if __name__ == '__main__':
 	### To test on gestures ###

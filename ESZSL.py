@@ -59,7 +59,8 @@ from sklearn.metrics.pairwise import polynomial_kernel
 from sklearn.base import BaseEstimator
 
 class ESZSL(BaseEstimator):
-	def __init__(self, lambdap = 0.1, sigmap = 0.1, degree = 'precomputed'):
+	def __init__(self, lambdap = 0.1, sigmap = 0.1, degree = 'precomputed', \
+									rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
@@ -71,6 +72,8 @@ class ESZSL(BaseEstimator):
 				is used. If 'precomputed', the input matrix is expected
 				to be a square matrix and it is used directly without
 				computing the kernel. 
+			rs: random seed
+			debug: if True, print statements are activated
 
 		Order in which GridSearchCV calls functions in scikit-learn:
 			set_params() ==> fit() ==> score()
@@ -80,8 +83,10 @@ class ESZSL(BaseEstimator):
 		self.sigmap = sigmap
 		self.lambdap = lambdap
 		self.degree = degree
+		self.rs = rs
+		self.debug = debug
 
-		# Attributes: Modified by fit()
+		# Attributes: Created by fit()
 		# self.A_ = None
 		# self.X_ = None # Needed for computing kernel
 	
