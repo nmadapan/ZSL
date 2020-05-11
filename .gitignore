@@ -1,7 +1,4 @@
 __pycache__/
-awa_data/
-gesture_data/
-sun_data/
-matsun/
+data/
 backup/
 *.pyc

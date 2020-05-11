@@ -176,6 +176,7 @@ def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 			print('Reading from: ', join(data_path, 'data.pickle'))
 			with open(join(data_path, 'data.pickle'), 'rb') as fp:
 				data = cPickle.load(fp)['data']
+			if(debug): print_dstruct(data)
 			return data
 	
 	## Creates 'feat' folder

@@ -27,10 +27,10 @@ import bz2
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .utils import geseture_to_dstruct
+from .utils import geseture_to_dstruct, print_dstruct
 
 ## Main function present in dataset folders. 
-def get_data(data_path, debug = False, use_pickle = False, rerun = False):
+def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 	'''
 	Input arguments:
 		* data_path: path to the .mat file containing the data. 
@@ -62,19 +62,20 @@ def get_data(data_path, debug = False, use_pickle = False, rerun = False):
 			7. unseen_attr_mat - 2D np.ndarray containing semantic description 
 				of unseen classes. (#unseen_classes x #attributes)
 	'''
-	if(use_pickle):
-		if(isfile(join(data_path, 'data.pickle'))):
-			print('Reading from: ', join(data_path, 'data.pickle'))
-			with open(join(data_path, 'data.pickle'), 'rb') as fp:
-				data = cPickle.load(fp)['data']
-			return data
+	dir_path = dirname(data_path)
+	if(use_pickle and isfile(join(dir_path, 'data.pickle'))):
+		print('Reading from: ', join(dir_path, 'data.pickle'))
+		with open(join(dir_path, 'data.pickle'), 'rb') as fp:
+			data = cPickle.load(fp)['data']
+		if(debug): print_dstruct(data)
+		return data
 	
 	## Re-organiz the data in the standard format.
 	data = geseture_to_dstruct(data_path, debug = debug)
 	
 	## Save the data into a pickle so we do not need to re-run everything again. 
 	if(use_pickle):
-		with open(join(data_path, 'data.pickle'), 'wb') as fp:
+		with open(join(dir_path, 'data.pickle'), 'wb') as fp:
 			cPickle.dump({'data': data}, fp)
 
 	return data

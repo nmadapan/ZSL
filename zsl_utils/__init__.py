@@ -1,2 +1,2 @@
 from .datasets import *
-from .linear import *
+from .plot import *

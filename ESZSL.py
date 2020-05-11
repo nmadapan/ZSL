@@ -49,7 +49,7 @@
 '''
 
 import sys
-from os.path import join
+from os.path import join, dirname
 import pickle
 
 from copy import deepcopy
@@ -234,44 +234,68 @@ class ESZSL(BaseEstimator):
 	# 	return dt
 		
 if __name__ == '__main__':
-	
-
-	# TODO: How is this data generated. 
-	## AwA
-	# data_dir = './awa_data'
-	# with open(join(data_dir, 'full_data.pickle'), 'rb') as fp:
-	# 	data = pickle.load(fp)['data']
-	# cut_ratio = 4
-
-	## SUN
-	from utils import *
-	data = sun_to_dstruct(base_dir = "./matsun")
+	### To test on gestures ###
+	from zsl_utils.datasets import gestures
+	print('Gesture Data ... ')
+	data_path = r'./data/gesture/data_0.61305.mat'
+	base_dir = dirname(data_path)
+	classes = ['A', 'B', 'C', 'D', 'E']
+	data = gestures.get_data(data_path, debug = True)
+	normalize = False
 	cut_ratio = 1
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_gestures.pickle'
+	###########################
 
-	## Gestures
-	# data_dir = './gesture_data'
-	# with open(join(data_dir, 'full_data.pickle'), 'rb') as fp:
-	# 	data = pickle.load(fp)['data']
+	###### To test on awa #######
+	## This is to convert awa data to a compatible format.
+	# from zsl_utils.datasets import awa
+	# print('AwA data ...')
+	# base_dir = './data/awa'
+	# classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
+	# data = awa.get_data(base_dir, debug = True)
+	# normalize = False
 	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary'
+	# out_fname = 'dap_awa.pickle'
+	#############################
 
-	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
+	###### To test on sun #######
+	# from zsl_utils.datasets import sun
+	# print('SUN data ...')
+	# base_dir = './data/matsun'
+	# data = sun.get_data(base_dir, debug = True)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary2'
+	# out_fname = 'dap_sun.pickle'
+	#############################
+
+	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
 
 	## Downsample the data: reduce the no. of instances per class
 	new_y_tr = []
-	for idx in np.unique(Y_tr):
-		temp = np.nonzero(Y_tr == idx)[0]
+	for idx in np.unique(y_tr):
+		temp = np.nonzero(y_tr == idx)[0]
 		last_id = int(len(temp)/cut_ratio)
 		new_y_tr += temp[:last_id].tolist()
 	new_y_tr = np.array(new_y_tr)
-	Y_tr = Y_tr[new_y_tr]
+	y_tr = y_tr[new_y_tr]
 	X_tr = X_tr[new_y_tr, :]
 
 	print('X_tr: ', X_tr.shape)
-	print('Y_tr: ', Y_tr.shape)
+	print('y_tr: ', y_tr.shape)
 
-	X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
+	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
 	print('X_ts: ', X_ts.shape)
-	print('Y_ts: ', Y_ts.shape)
+	print('y_ts: ', y_ts.shape)
 
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 	print('S_tr: ', S_tr.shape)
@@ -281,12 +305,12 @@ if __name__ == '__main__':
 	clf = ESZSL(sigmap = 1e1, lambdap = 1e-2, degree = 1)
 
 	print('Fitting')
-	clf.fit(X_tr, S_tr, Y_tr)
+	clf.fit(X_tr, S_tr, y_tr)
 
 	print('Predicting on train data')
 	Z = clf.predict(X_tr, S=S_tr)
-	print(np.mean(Z==Y_tr))
+	print(np.mean(Z==y_tr))
 
 	print('Predicting')
 	Z = clf.predict(X_ts, S=S_ts)
-	print(np.mean(Z==Y_ts))
+	print(np.mean(Z==y_ts))

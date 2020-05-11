@@ -1,9 +1,9 @@
 '''
 	This file implements a zero-shot learning (ZSL) classifier 
-	known as DAP (Direct Attribute Prediction) proposed by 
+	known as IAP (Indirect Attribute Prediction) proposed by 
 	Lampert et al. in 2009 and 2014. 
 
-	The class, DAP is implemented in a format similar to 
+	The class, IAP is implemented in a format similar to 
 	standard scikit learn packages, except that, in addition to
 	class labels, you should pass a semantic description (SD)
 	matrix as well. 
@@ -26,12 +26,13 @@
 		* X (n x d) - Input data matrix
 		* S (z x a) - SD matrix of seen classes
 
-	In DAP, you will train a binary classifier or regressor for each
-	descriptor separately. Hence, there will be $a$ classifiers or
-	regressors. Support Vector Machines (SVM) classifier and 
-	regressor is used in this file. This implementation expects a
-	customized SVM classifier/regressor (refer to SVMClassifier.py
-	or SVMRegressor.py).
+	In IAP, you will train a multi-class SVM classifier. This trained
+	classifier is used to predict the probabilities of instances
+	of unseen classes belonging to the seen classes. Then, you will
+	map these probabilities to attribute probabilities, and thereby
+	estimate the probability of these instances belonging to the
+	unseen classes. This implementation expects a customized
+	SVM classifier (refer to SVMClassifier.py).
 
 	Code adapted from: 
 		* https://github.com/chcorbi/AttributeBasedTransferLearning.git
@@ -44,21 +45,18 @@
 '''
 
 import sys
-from os.path import join, basename, dirname
+from os.path import join, dirname
 import pickle
 from time import time
 
 import numpy as np
-from sklearn.metrics.pairwise import polynomial_kernel
-from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
-from sklearn.metrics import f1_score
+from sklearn.metrics import accuracy_score
 
 from utils import is_binary
-from SVMClassifier import SVMClassifier
-from SVMRegressor import SVMRegressor
+from SVMClassifier import SVMClassifierIAP
 
-class DAP(BaseEstimator):
+class IAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, clamp = 2.9, rs = None):
 		'''
 		Description:
@@ -115,7 +113,7 @@ class DAP(BaseEstimator):
 		## Attributes: Modified by decision_function()
 		# self.class_prob_ = None # class probability matrix.
 		# self.attr_prob_ = None # attribute probability matrix.
-
+	
 	def _update_attributes(self, X, S, y):
 		'''
 		Update the following attributes:
@@ -165,35 +163,18 @@ class DAP(BaseEstimator):
 			raise ValueError('Error! Class indices in y should be relative: 0, 1, ..., num_classes-1')
 
 		## Initialize classifiers/regressors
-		self.clfs_ = []
-		if(self.binary_):
-			for _ in range(self.num_attr_): self.clfs_.append(SVMClassifier(\
-				skewedness=self.skewedness, n_components=self.n_components, \
-				C=self.C, clamp = self.clamp, rs = self.rs))
-		else: 
-			for _ in range(self.num_attr_): self.clfs_.append(SVMRegressor(\
-				skewedness=self.skewedness, n_components=self.n_components,\
-				C=self.C, clamp = self.clamp, rs = self.rs))
+		self.clf_ = SVMClassifierIAP(skewedness=self.skewedness, n_components=self.n_components,\
+							C=self.C, clamp = self.clamp, rs = self.rs)
 
-		## Training data is used for classification/regression, validation data is used 
-		# for platt fitting. 
-		Xplat_train, Xplat_val, aplat_train, aplat_val = train_test_split(\
-			X, S[y, :], test_size=0.10, random_state = self.rs)			
+		print('Training the model ...')
+		t0 = time()
+		self.clf_.fit(X, y)
+		print('Training finished in %.02f secs'%(time() - t0))
 
-		for idx in range(self.num_attr_):
-			print ('--------- Attribute %d/%d ---------' % (idx+1, self.num_attr_))
-			t0 = time()
-
-			# Training and do hyper-parameter search
-			self.clfs_[idx].fit(Xplat_train, aplat_train[:,idx])
-			print ('Fitted classifier in: %fs' % (time() - t0))
-			a_pred_train = self.clfs_[idx].predict(Xplat_train)
-			if(self.binary_):
-				## Training data
-				self.clfs_[idx].set_platt_params(Xplat_val, aplat_val[:,idx])
-				f1_score_c0 = f1_score(aplat_train[:, idx], a_pred_train, pos_label = 0)
-				f1_score_c1 = f1_score(aplat_train[:, idx], a_pred_train, pos_label = 1)
-				print('Train F1 scores: %.02f, %.02f'%(f1_score_c0, f1_score_c1))			
+		## Train evaluation
+		y_pred = self.clf_.predict(X)
+		acc = accuracy_score(y, y_pred)
+		print('Train Accuracy: %.02f'%acc)
 		
 		return self
 		
@@ -204,30 +185,24 @@ class DAP(BaseEstimator):
 			* S (z' x a): 2D np.ndarray - semantic description matrix of test classes
 		Attributes:
 			* self.class_prob_ (n' x z'): 2D np.ndarray - class probability matrix.
-			* self.attr_prob_  (n' x a): 2D np.ndarray - attribute probability matrix.
+			* self.attr_prob_  (n' x a): 2D np.ndarray - attribute probability matrix.		
 		Return:
 			* Z: (n' x z') matrix of class scores
 		'''
 
 		## Assertions to call fit first()
 		try:
-			_ = self.clfs_
+			_ = self.clf_
 		except AttributeError as exp:
 			print('Error! clfs_ attribute does not exist. Run fit() first. ')
 			raise exp
 
-		a_pred = np.zeros((X.shape[0], S.shape[1]))
-		a_proba = np.copy(a_pred)
-		prob=[] # (n, 10)
-
-		for idx in range(self.num_attr_):
-			a_pred[:,idx] = self.clfs_[idx].predict(X)
-			if(self.binary_):
-				a_proba[:,idx] = self.clfs_[idx].predict_proba(X)
+		y_proba = self.clf_.predict_proba(X)
+		P = np.dot(y_proba, self.S_)
 
 		## Estimate output probabilities. Refer to paper. 
+		prob=[] # (n, a)
 		if(self.binary_):
-			P = a_proba # (n, 85)
 			prior = np.mean(self.S_, axis=0)
 			prior[prior==0.] = 0.5
 			prior[prior==1.] = 0.5    # disallow degenerated priors
@@ -235,7 +210,6 @@ class DAP(BaseEstimator):
 				prob.append(np.prod(S*p + (1-S)*(1-p),axis=1)/\
 							np.prod(S*prior+(1-S)*(1-prior), axis=1) )			
 		else:
-			P = a_pred # (n, 85)
 			Md = np.copy(S).astype(np.float)
 			Md /= np.linalg.norm(Md, axis = 1, keepdims = True)
 			for p in P:
@@ -243,9 +217,8 @@ class DAP(BaseEstimator):
 				prob.append(np.dot(Md, p))
 
 		## Attributes
-		self.class_prob_ = prob # (n, z)
-		self.attr_prob_ = a_proba # (n, a)
-
+		self.class_prob_ = prob
+		self.attr_prob_ = P
 		return prob
 	
 	def predict(self, X, S):
@@ -260,7 +233,7 @@ class DAP(BaseEstimator):
 		'''		
 		## Assert to call fit first()
 		try:
-			_ = self.clfs_
+			_ = self.clf_
 		except AttributeError as exp:
 			print('Error! clfs_ attribute does not exist. Run fit() first. ')
 			raise exp
@@ -280,13 +253,13 @@ class DAP(BaseEstimator):
 		'''			
 		## Assert to call fit first()
 		try:
-			_ = self.clfs_
+			_ = self.clf_
 		except AttributeError as exp:
 			print('Error! clfs_ attribute does not exist. Run fit() first. ')
 			raise exp
 
 		y_pred = self.predict(X, S)
-		return np.mean(y == y_pred)
+		return accuracy_score(y, y_pred)
 		
 if __name__ == '__main__':
 	### To test on gestures ###
@@ -357,7 +330,7 @@ if __name__ == '__main__':
 	print('S_ts: ', S_ts.shape)
 
 	print('Data Loaded. ')
-	clf = DAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1)
+	clf = IAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1)
 
 	print('Fitting')
 	clf.fit(X_tr, S_tr, Y_tr)

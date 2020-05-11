@@ -32,7 +32,7 @@ import bz2
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .utils import sun_to_dstruct
+from .utils import sun_to_dstruct, print_dstruct
 
 ## Main function present in dataset folders. 
 def get_data(data_path, debug = False, use_pickle = False, rerun = False):
@@ -75,6 +75,7 @@ def get_data(data_path, debug = False, use_pickle = False, rerun = False):
 			print('Reading from: ', join(data_path, 'data.pickle'))
 			with open(join(data_path, 'data.pickle'), 'rb') as fp:
 				data = cPickle.load(fp)['data']
+			if(debug): print_dstruct(data)
 			return data
 	
 	## Re-organiz the data in the standard format.

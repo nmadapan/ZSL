@@ -28,6 +28,7 @@ from sklearn.exceptions import ConvergenceWarning
 
 ## Custom modules
 from utils import *
+from zsl_utils import *
 from SVMClassifier import SVMClassifierIAP
 from SVMRegressor import SVMRegressorIAP
 
@@ -326,45 +327,47 @@ class IAP(object):
 
 if __name__ == '__main__':
 	### To test on gestures ###
-	data_path = r'/home/isat-deep/Desktop/Naveen/fg2020/data/cust_feat_data/data_0.61305.mat'
+	from zsl_utils.datasets import gestures
+	print('Gesture Data ... ')
+	data_path = r'./data/gesture/data_0.61305.mat'
+	base_dir = dirname(data_path)
 	classes = ['A', 'B', 'C', 'D', 'E']
-	base_dir = './gesture_data'
-	data = reformat_dstruct(data_path)
-	normalize = True
+	data = gestures.get_data(data_path, debug = True)
+	normalize = False
 	cut_ratio = 1
-	parameters = {'fp__skewedness': [6.], # [4., 6., 10.]
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
 				  'fp__n_components': [50],
 				  'svm__C': [1.]} # [1., 10.]
 	p_type = 'binary'
-	out_fname = 'dap_' + basename(data_path)[:-4] + '.pickle'
-	print('Gesture Data ... ', p_type)
+	out_fname = 'dap_gestures.pickle'
 	###########################
 
 	###### To test on awa #######
-	# This is to convert awa data to a compatible format.
-	# base_dir = './awa_data'
-	# classes = loadstr(join(base_dir, 'testclasses.txt'))
-	# with open(join(base_dir, 'full_data.pickle'), 'rb') as fp:
-	# 	data = pickle.load(fp)['data']
+	## This is to convert awa data to a compatible format.
+	# from zsl_utils.datasets import awa
+	# print('AwA data ...')
+	# base_dir = './data/awa'
+	# classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
+	# data = awa.get_data(base_dir, debug = True)
+	# normalize = False
 	# cut_ratio = 1
 	# parameters = None
-	# normalize = False
 	# p_type = 'binary'
 	# out_fname = 'dap_awa.pickle'
-	# print('AwA data ...', p_type)
 	#############################
 
 	###### To test on sun #######
-	# from utils import *
-	# base_dir = "./matsun"
-	# data = sun_to_dstruct(base_dir = base_dir)
+	# from zsl_utils.datasets import sun
+	# print('SUN data ...')
+	# base_dir = './data/matsun'
+	# data = sun.get_data(base_dir, debug = True)
 	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
 	# cut_ratio = 1
 	# parameters = None
-	# normalize = False
 	# p_type = 'binary2'
 	# out_fname = 'dap_sun.pickle'
-	# print('SUN data ...', p_type)
 	#############################
 
 	## Downsample the data: reduce the no. of instances per class
