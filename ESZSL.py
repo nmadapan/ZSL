@@ -128,8 +128,8 @@ class ESZSL(BaseEstimator):
 
 		if self.degree =='precomputed':
 			## Assert that kernel should be squared matrix. 
-			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
-										kernel matrix should be square matrix.'
+			assert X.shape[0] == X.shape[1], \
+				'If degree is "precomputed", kernel matrix should be square matrix.'
 			K = X
 		elif self.degree is None:
 			K = X
@@ -141,8 +141,8 @@ class ESZSL(BaseEstimator):
 		
 		Y = self._one_hot_matrix(y)
 		KK = np.dot(K.T,K)
-		KK = np.linalg.inv(KK+self.lambdap*(np.eye(K.shape[0])))
-		KYS = np.dot(np.dot(K,Y),S)    
+		KK = np.linalg.inv(KK+self.lambdap*(np.eye(KK.shape[0])))
+		KYS = np.dot(np.dot(K.T,Y),S)
 		SS = np.dot(S.T,S)
 		SS = np.linalg.inv(SS+self.sigmap*np.eye(SS.shape[0]))
 		self.A_ = np.dot(np.dot(KK,KYS),SS)
@@ -271,7 +271,7 @@ if __name__ == '__main__':
 	# data = sun.get_data(base_dir, debug = True)
 	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
 	# normalize = False
-	# cut_ratio = 1
+	# cut_ratio = 4
 	# parameters = None
 	# p_type = 'binary2'
 	# out_fname = 'dap_sun.pickle'

@@ -4,9 +4,9 @@
 * Get tensorflow and pytorch running in this computer. 
 
 ## Next 2 days
-* Add kernels to SAE and check the results on object and standard datasets. 
-* Check if sae-like normalization boosts accuracies on ESZSL method. 
-* Check if removing kernels makes ESZSL accuracies worse.  
+* [DONE: almost same] Add kernels to SAE and check the results on object and standard datasets. 
+* [DONE: minor change] Check if sae-like normalization boosts accuracies on ESZSL method. 
+* [DONE: No, it very similar] Check if removing kernels makes ESZSL accuracies worse.  
 
 * Generate deep features using B-LSTM code that we have and re-run all tests. 
 

@@ -158,7 +158,7 @@ class SAE(BaseEstimator):
 		# self.degree is asserted in fit()		
 		if self.degree =='precomputed':
 			## Assert that kernel should be squared matrix. 
-			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
+			assert X.shape[0] == X.shape[1], 'If degree is "precomputed", \
 										kernel matrix should be square matrix.'		
 			K = X
 		elif self.degree is None:
