@@ -51,15 +51,22 @@ import sys
 from sklearn.base import BaseEstimator
 from os.path import dirname, join
 from sklearn.metrics import accuracy_score
+from sklearn.metrics.pairwise import polynomial_kernel
+from sklearn.preprocessing import StandardScaler
 
 class SAE(BaseEstimator):
-	def __init__(self, lambdap = 5e5, rs = None, debug = False):
+	def __init__(self, lambdap = 5e5, degree = None, rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
 				get_params() and set_params() functions. 
 		Input parameters:
 			lambdap: Hyper parameter.
+			degree: If integer value, polynomial kernel with that degree
+				is used. If 'precomputed', the input matrix is expected
+				to be a square matrix and it is used directly without
+				computing the kernel. If it is None, the data is used
+				as it is without computing any kernel. 
 			rs: random seed
 			debug: if True, print statements are activated
 		Order in which GridSearchCV calls functions in scikit-learn:
@@ -67,10 +74,13 @@ class SAE(BaseEstimator):
 		'''
 
 		self.lambdap = lambdap
+		self.degree = degree
 		self.rs = rs
 		self.debug = debug
 
 		## Attributes: Created by fit()
+		# This is saved if degree is integer. To computer kernel for test data. 
+		# self.X_ = None 
 		# self.S_ = None
 		# self.W_ = None
 
@@ -91,20 +101,38 @@ class SAE(BaseEstimator):
 		Attributes created:
 			* S_ (SD matrix of seen classes)
 			* W_ (weight matrix to transform inputs to SDs)
+			* X_ (Input data. It will be used to compute kernel for test data
+				if degree is an integer.)
 		Return:
 			* self
 		'''
 
-		## Assertions here
-		X = self._normalize(X)
+		## Assertion on degree. It should be in ['precomputed' or None, int or float]
+		assert self.degree in ['precomputed', None] or type(self.degree) in [int, float], \
+			   'Error: degree is invalid!'
 
-		# S: z x a ==> n x a # X: n x d
+		if self.degree =='precomputed':
+			## Assert that kernel should be squared matrix. 
+			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
+										kernel matrix should be square matrix.'
+			K = X
+		elif self.degree is None:
+			K = X # Use the input data as it is. 
+		else:
+			## NOTE: if gamma is not equal to 1, accuracy drops significantly
+			# for both awa and gesture datasets. 
+			K = polynomial_kernel(X, X, degree = self.degree, gamma = 1)
+			## Store X to compute the kernel for testing data. 
+			self.X_ = X
+
+		# S: z x a ==> n x a # K: n x d
 		A = np.dot(S[y, :].T, S[y, :]) # a x a
-		B = self.lambdap * np.dot(X.T, X) # d x d
-		C = (1+self.lambdap) * np.dot(S[y, :].T, X) # a x d
+		B = self.lambdap * np.dot(K.T, K) # d x d
+		C = (1+self.lambdap) * np.dot(S[y, :].T, K) # a x d
 		W = solve_sylvester(A,B,C) # a x d
-		self.W_ = self._normalize(W, axis=1)
+		self.W_ = W
 		self.S_ = S
+		return self
 
 	def decision_function(self, X, S):
 		'''
@@ -118,7 +146,7 @@ class SAE(BaseEstimator):
 				* $$ Y' = S X W^T $$		
 		Return:
 			* Z: (n' x z') matrix of class scores
-		'''		
+		'''
 
 		## Assert to call fit first()
 		try:
@@ -126,14 +154,24 @@ class SAE(BaseEstimator):
 		except AttributeError as exp:
 			print('Error! W_ attribute does not exist. Run fit() first. ')
 			raise exp
-		
-		S_pred = np.dot(X, self.W_.T) # N x a
+
+		# self.degree is asserted in fit()		
+		if self.degree =='precomputed':
+			## Assert that kernel should be squared matrix. 
+			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
+										kernel matrix should be square matrix.'		
+			K = X
+		elif self.degree is None:
+			K = X
+		else:
+			## NOTE: if gamma is not equal to 1, accuracy drops significantly
+			# for both awa and gesture datasets. 
+			K = polynomial_kernel(X, self.X_, degree = self.degree, gamma = 1)
+
+		S_pred = np.dot(K, self.W_.T) # N x a
+
 		# Normalize for cosine similarity
 		S_pred = self._normalize(S_pred, axis = 1)
-
-		# Normalize each attribute first
-		S = self._normalize(S, axis = 0)
-
 		# Normalize each class now # For cosine similarity
 		S = self._normalize(S, axis = 1)
 
@@ -186,20 +224,21 @@ class SAE(BaseEstimator):
 def main():
 
 	### To test on gestures ###
-	# from zsl_utils.datasets import gestures
-	# print('Gesture Data ... ')
-	# data_path = r'./data/gesture/data_0.61305.mat'
-	# base_dir = dirname(data_path)
-	# classes = ['A', 'B', 'C', 'D', 'E']
-	# data = gestures.get_data(data_path, debug = True)
-	# normalize = False
-	# cut_ratio = 1
-	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [50],
-	# 			  'svm__C': [1.]} # [1., 10.]
-	# p_type = 'binary'
-	# out_fname = 'dap_gestures.pickle'
+	## StandardScaler works better for this dataset. 
+	from zsl_utils.datasets import gestures
+	print('Gesture Data ... ')
+	data_path = r'./data/gesture/data_0.61305.mat'
+	base_dir = dirname(data_path)
+	classes = ['A', 'B', 'C', 'D', 'E']
+	data = gestures.get_data(data_path, debug = True)
+	normalize = False
+	cut_ratio = 1
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_gestures.pickle'
 	###########################
 
 	###### To test on awa #######
@@ -230,18 +269,32 @@ def main():
 	# #############################
 
 	###### To test on awa sae data #######
+	## UnitScaler works better for this dataset. 
 	## This is to convert awa data to a compatible format.
-	from zsl_utils.datasets import awa_sae
-	print('AwA data ...')
-	base_dir = './data/awa_sae'
-	data = awa_sae.get_data(join(base_dir, 'awa_demo_data.mat'), debug = True)
-	classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
-	normalize = False
-	cut_ratio = 1
-	parameters = None
-	p_type = 'binary'
-	out_fname = 'dap_awa_sae.pickle'
+	# from zsl_utils.datasets import awa_sae
+	# print('AwA data ...')
+	# base_dir = './data/awa_sae'
+	# data = awa_sae.get_data(join(base_dir, 'awa_demo_data.mat'), debug = True)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = None
+	# p_type = 'binary'
+	# out_fname = 'dap_awa_sae.pickle'
 	#############################
+
+	### To test on CGD 2016 - gestures ###
+	# from zsl_utils.datasets import gestures
+	# print('Gesture Data ... ')
+	# data_path = r'/media/isat-deep/AHRQ IV/Naveen/ie590_project/fg2020_ie590/data/zsl_data/data_0.mat'
+	# base_dir = dirname(data_path)
+	# data = gestures.get_data(data_path, use_pickle = False, debug = True)
+	# classes = [str(idx) for idx in range(data['unseen_attr_mat'].shape[0])]
+	# normalize = False
+	# cut_ratio = 1
+	# p_type = 'binary'
+	# out_fname = 'dap_gestures.pickle'
+	###########################	
 
 	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
 	## Downsample the data: reduce the no. of instances per class
@@ -257,13 +310,24 @@ def main():
 	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
-	clf = SAE()
+	from utils import UnitScaler, ZSLPipeline, normalize
+	clf = ZSLPipeline([('s', UnitScaler()),
+					   ('c', SAE(degree = None)),
+					  ])
+	clf.set_params(c__lambdap = 5e5)
+
+	print('Fitting ...')
 	clf.fit(X_tr, S_tr, y_tr)
 	print('Predicting on train data')
+	# Normalize each attribute first
+	S_tr = normalize(S_tr, axis = 0)
 	print(clf.score(X_tr, S_tr, y_tr))
 
 	print('Predicting')
+	# Normalize each attribute first
+	S_ts = normalize(S_ts, axis = 0)
 	print(clf.score(X_ts, S_ts, y_ts))
 
 if __name__ == '__main__':
 	main()
+ 

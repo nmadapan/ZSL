@@ -1,0 +1,44 @@
+
+* Backup everything that is in this computer so far. 
+* Make sure to push the code to git and copy the repositories as they have data. 
+* Get tensorflow and pytorch running in this computer. 
+
+## Next 2 days
+* Add kernels to SAE and check the results on object and standard datasets. 
+* Check if sae-like normalization boosts accuracies on ESZSL method. 
+* Check if removing kernels makes ESZSL accuracies worse.  
+
+* Generate deep features using B-LSTM code that we have and re-run all tests. 
+
+* [DONE] Convert the Kaushik data into standard format. SDs, class ids, I/O of seen/unseen classes. 
+* [DONE] Check if this is partially done in fg2020 - one of the files run_fg_session.m might have it. 
+* [DONE] Test how good the results are on this dataset using all our baselines. 
+* [DONE] Juan - Check MTurk interface and how it can be used for more annotations if needed.
+
+* Do hyperparameter search using this dataset for all methods. Create these scripts which does it all.
+* Generate best seen-unseen class ids in Windows/Matlab.
+
+## Next 2 days
+* Get Attention LSTM, 3DConvLSTM, C3D networks working. 
+* Integrate these networks with SD loss and stuff. 
+
+## Next 2 days
+Finish implementing semantic loss with B-LSTM stuff. 
+Create another baseline with GRU and stuff. 
+
+## Misc
+Make the attribute dataset without baselines - finish that repository.
+
+Explore attention ZSL to see how it works. and may other baselines. 
+
+* CHeck if converting data to a kernel always helps. 
+* Need to test this rigorously
+
+
+# Ideas
+* Combine the idea of zsl with siamese-like networks with triplet losses. 
+
+Library modifications:
+We want to have stand alone classes for each ZSL method. 
+We should be able to combine it with scalers in sklearn, kernel methods in sklearn using ZSLPipeline. 
+We should be able tune this combination using ZSLGridSearchCV. 

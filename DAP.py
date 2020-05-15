@@ -296,20 +296,20 @@ class DAP(BaseEstimator):
 		
 if __name__ == '__main__':
 	### To test on gestures ###
-	from zsl_utils.datasets import gestures
-	print('Gesture Data ... ')
-	data_path = r'./data/gesture/data_0.61305.mat'
-	base_dir = dirname(data_path)
-	classes = ['A', 'B', 'C', 'D', 'E']
-	data = gestures.get_data(data_path, debug = True)
-	normalize = False
-	cut_ratio = 1
-	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-				  'fp__skewedness': [6.], # [4., 6., 10.]
-				  'fp__n_components': [50],
-				  'svm__C': [1.]} # [1., 10.]
-	p_type = 'binary'
-	out_fname = 'dap_gestures.pickle'
+	# from zsl_utils.datasets import gestures
+	# print('Gesture Data ... ')
+	# data_path = r'./data/gesture/data_0.61305.mat'
+	# base_dir = dirname(data_path)
+	# classes = ['A', 'B', 'C', 'D', 'E']
+	# data = gestures.get_data(data_path, debug = True)
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
+	# 			  'fp__n_components': [50],
+	# 			  'svm__C': [1.]} # [1., 10.]
+	# p_type = 'binary'
+	# out_fname = 'dap_gestures.pickle'
 	###########################
 
 	###### To test on awa #######
@@ -339,6 +339,23 @@ if __name__ == '__main__':
 	# out_fname = 'dap_sun.pickle'
 	#############################
 
+	### To test on CGD 2016 - gestures ###
+	from zsl_utils.datasets import gestures
+	print('Gesture Data ... ')
+	data_path = r'/media/isat-deep/AHRQ IV/Naveen/ie590_project/fg2020_ie590/data/zsl_data/data_1.mat'
+	base_dir = dirname(data_path)
+	classes = ['A', 'B', 'C', 'D', 'E']
+	data = gestures.get_data(data_path, debug = True)
+	normalize = False
+	cut_ratio = 1
+	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+				  'fp__skewedness': [6.], # [4., 6., 10.]
+				  'fp__n_components': [50],
+				  'svm__C': [1.]} # [1., 10.]
+	p_type = 'binary'
+	out_fname = 'dap_gestures.pickle'
+	###########################
+
 	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
 
 	## Downsample the data: reduce the no. of instances per class
@@ -363,7 +380,7 @@ if __name__ == '__main__':
 	print('S_ts: ', S_ts.shape)
 
 	print('Data Loaded. ')
-	clf = DAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1)
+	clf = DAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1, debug = True)
 
 	print('Fitting')
 	clf.fit(X_tr, S_tr, Y_tr)

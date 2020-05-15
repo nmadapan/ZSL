@@ -291,9 +291,9 @@ class ZSLGridSearchCV():
 
 		self.model.set_params(**best_params)
 		self.model.fit(X, S, y)
-		self.best_model_ = model # Attribute
+		self.best_model_ = self.model # Attribute
 
-		return model
+		return self.model
 
 if __name__ == '__main__':
 	### To test on gestures ###

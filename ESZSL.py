@@ -57,6 +57,8 @@ from copy import deepcopy
 import numpy as np
 from sklearn.metrics.pairwise import polynomial_kernel
 from sklearn.base import BaseEstimator
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score
 
 class ESZSL(BaseEstimator):
 	def __init__(self, lambdap = 0.1, sigmap = 0.1, degree = 'precomputed', \
@@ -89,6 +91,7 @@ class ESZSL(BaseEstimator):
 		# Attributes: Created by fit()
 		# self.A_ = None
 		# self.X_ = None # Needed for computing kernel
+		# self.S_ = None # (SD matrix of seen classes)
 	
 	def _one_hot_matrix(self, y):
 		# y - 1D np.ndarray of class indices (integers [0, 1, ...])
@@ -99,6 +102,9 @@ class ESZSL(BaseEstimator):
 		# AwA and gestures dataset. Using 0 instead. 
 		Y[Y == 0] = 0.0 
 		return Y
+
+	def _normalize(self, M, axis = 0):
+		return M / (np.linalg.norm(M, axis = axis, keepdims=True) + 1e-10)
 	
 	def fit(self, X, S, y):
 		'''
@@ -111,24 +117,27 @@ class ESZSL(BaseEstimator):
 		Attributes created:
 			* X_ (input data is saved if degree is integer for computing
 				kernel for testing data.)
-			* A_ (weight matrix to transform inputs to SDs)
+			* A_ (weight matrix to transform inputs to SDs) - (d x a)
+			* S_ (SD matrix of seen classes)
 		Return:
 			* self
 		'''
 		## Assertion on degree. It should be in ['precomputed' or int]
-		assert self.degree == 'precomputed' or isinstance(self.degree, float) \
-				or isinstance(self.degree, int), 'Error: degree is invalid!'
+		assert self.degree in ['precomputed', None] or type(self.degree) in [int, float], \
+			   'Error: degree is invalid!'
 
 		if self.degree =='precomputed':
-			K = X
 			## Assert that kernel should be squared matrix. 
 			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
 										kernel matrix should be square matrix.'
+			K = X
+		elif self.degree is None:
+			K = X
 		else:
-			self.X_ = X
 			## NOTE: if gamma is not equal to 1, accuracy drops significantly
 			# for both awa and gesture datasets. 
 			K = polynomial_kernel(X, X, degree = self.degree, gamma = 1)
+			self.X_ = X
 		
 		Y = self._one_hot_matrix(y)
 		KK = np.dot(K.T,K)
@@ -137,6 +146,7 @@ class ESZSL(BaseEstimator):
 		SS = np.dot(S.T,S)
 		SS = np.linalg.inv(SS+self.sigmap*np.eye(SS.shape[0]))
 		self.A_ = np.dot(np.dot(KK,KYS),SS)
+		self.S_ = S
 		return self
 		
 	def decision_function(self, X, S):
@@ -157,17 +167,28 @@ class ESZSL(BaseEstimator):
 			print('Error! A_ attribute does not exist. Run fit() first. ')
 			raise exp
 
-		# self.degree is asserted in fit()		
+		# self.degree is asserted in fit()
 		if self.degree =='precomputed':
 			## Assert that kernel should be squared matrix. 
 			assert K.shape[0] == K.shape[1], 'If degree is "precomputed", \
 										kernel matrix should be square matrix.'		
 			K = X
+		elif self.degree is None:
+			K = X
 		else:
 			## NOTE: if gamma is not equal to 1, accuracy drops significantly
 			# for both awa and gesture datasets. 
 			K = polynomial_kernel(X, self.X_, degree = self.degree, gamma = 1)
-		Z = np.dot(np.dot(S,self.A_.T),K.T).T
+		
+		S_pred = np.dot(K, self.A_)
+
+		# Normalize for cosine similarity
+		S_pred = self._normalize(S_pred, axis = 1)
+		# Normalize each class now # For cosine similarity
+		S = self._normalize(S, axis = 1)
+
+		# Class probabilities
+		Z = np.dot(S_pred, S.T)
 
 		return Z
 	
@@ -209,7 +230,7 @@ class ESZSL(BaseEstimator):
 			raise exp
 
 		y_pred = self.predict(X, S)
-		return np.mean(y == y_pred)
+		return accuracy_score(y, y_pred)
 		
 if __name__ == '__main__':
 	### To test on gestures ###
@@ -270,6 +291,23 @@ if __name__ == '__main__':
 	# out_fname = 'dap_awa_sae.pickle'
 	#############################
 
+	### To test on CGD 2016 - gestures ###
+	# from zsl_utils.datasets import gestures
+	# print('Gesture Data ... ')
+	# data_path = r'/media/isat-deep/AHRQ IV/Naveen/ie590_project/fg2020_ie590/data/zsl_data/data_3.mat'
+	# base_dir = dirname(data_path)
+	# classes = ['A', 'B', 'C', 'D', 'E']
+	# data = gestures.get_data(data_path, debug = True)
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
+	# 			  'fp__n_components': [50],
+	# 			  'svm__C': [1.]} # [1., 10.]
+	# p_type = 'binary'
+	# out_fname = 'dap_gestures.pickle'
+	###########################
+
 	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
 	## Downsample the data: reduce the no. of instances per class
 	new_y_tr = []
@@ -285,15 +323,22 @@ if __name__ == '__main__':
 	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
 	print('Data Loaded. ')
-	clf = ESZSL(sigmap = 1e1, lambdap = 1e-2, degree = 1)
 
-	print('Fitting')
+	from utils import ZSLPipeline, normalize
+	clf = ZSLPipeline([('s', StandardScaler()),
+					   ('c', ESZSL(degree = 1, debug = True)),
+					  ])
+	clf.set_params(c__sigmap = 1e1, c__lambdap = 1e-2)
+
+	print('Fitting ...')
 	clf.fit(X_tr, S_tr, y_tr)
 
 	print('Predicting on train data')
-	Z = clf.predict(X_tr, S=S_tr)
-	print(np.mean(Z==y_tr))
+	# Normalize each attribute first
+	S_tr = normalize(S_tr, axis = 0)
+	print(clf.score(X_tr, S_tr, y_tr))
 
 	print('Predicting')
-	Z = clf.predict(X_ts, S=S_ts)
-	print(np.mean(Z==y_ts))
+	# Normalize each attribute first
+	S_ts = normalize(S_ts, axis = 0)
+	print(clf.score(X_ts, S_ts, y_ts))
