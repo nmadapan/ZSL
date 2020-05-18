@@ -1,6 +1,7 @@
 import numpy as np
 import pickle as cPickle
 import bz2
+import csv
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 from scipy.io import loadmat, savemat
@@ -335,3 +336,174 @@ def geseture_to_dstruct(data_path, debug = False):
 	if(debug): print_dstruct(data)
 
 	return data
+
+def get_cgd2016_data(csv_path, feature_map_dir, num_unseen_classes = 10, display = False):
+	'''
+	Description: 
+		Given the path to the csv file consisting of annotated descriptors, 
+		this script finds the best seen/unseen class splits. In other words, 
+		we want all the descriptors in the seen classes to be both 
+		present and absent (there should be some zeros and some ones) so 
+		that the ZSL classifiers can learn to recognize those attributes. 
+	
+		In this script, we first identify the descriptors that are present/
+		absent only few times (\\approx <4) and appends the corresponding
+		classes to the list of seen classes. 
+	
+	Input arguments:
+		* csv_path: Absolute path to the annotated_videos.csv file. 
+			This csv file consists of 12117 rows including the row header,
+			24 columns. Each row corresponds to an instance in the CGD 2016
+			dataset. 
+			- Columns: 1 - 2
+				* path to RGB and Depth video
+			- Columns: 3
+				* Absolute class label
+			- Columns: 4 - 22
+				* Binary annotations of 19 semantic descriptors. 
+			- Columns: 23 - 24
+				* Path to the VGG 19 features. 
+		* display: If True, SD matrix is visualized. 
+		* num_unseen_classes: No. of unseen classes
+	Return:
+		data: zsl data in standard format. 
+	'''	
+	## Read the CSV file. 
+	sd_data = []
+	with open(csv_path, 'r') as fp:
+		for line in csv.reader(fp, delimiter = ','):
+			sd_data.append(line)
+	# sd_data consists of semantic description information for all the instances.
+	sd_data = np.array(sd_data)
+
+	# Absolute class labels of all instances # (12116, )
+	labels = sd_data[1:, 2].astype(int)
+	# SD annotations of all instances # (12116, 19)
+	M = sd_data[1:, 3:-2].astype(int)
+	# Get path to RGB feature maps. 
+	rgb_fp_files = sd_data[1:, -2]
+	rgb_fp_files = [basename(fp) for fp in rgb_fp_files]
+
+	## Find SD vector of each class (there are 48 classes)
+	unique_labels, unique_indices = np.unique(labels, return_index = True)
+
+	## Absolute class ids of 48 classes
+	absolute_class_ids = unique_labels
+	## SD matrix of 48 classes
+	S = M[unique_indices, :]
+
+	## Find num classes and descriptors
+	num_classes = S.shape[0]
+	num_descs = S.shape[1]
+	# print('No. of classes: ', num_classes)
+	# print('No. of descriptors: ', num_descs)
+
+	seen_class_ids, unseen_class_ids = find_best_seen_unseen_splits(S, num_unseen_classes, K = 3)
+
+	## Find seen/unseen SD matrices
+	seen_attr_mat = S[seen_class_ids, :]
+	unseen_attr_mat = S[unseen_class_ids, :]
+
+	# print('Seen Attribute Matrix: ', seen_attr_mat.shape)
+	# print('Unseen Attribute Matrix: ', unseen_attr_mat.shape)
+
+	## Find seen/unseen flags
+	seen_flags = np.sum(labels == absolute_class_ids[seen_class_ids][:, np.newaxis], axis = 0) == 1
+	unseen_flags = np.sum(labels == absolute_class_ids[unseen_class_ids][:, np.newaxis], axis = 0) == 1
+	assert seen_flags.sum() + unseen_flags.sum() == len(labels), \
+		'Error! Sum of no. of seen and unseen flags should be equal to total number of instances. '
+
+	if(display):
+		plt.imshow(S.T.astype(np.uint8)*255)
+		plt.xlabel('Classes: 0 - ' +  str(S.shape[0]), fontsize = 12)
+		plt.ylabel('Descriptors 0 - ' + str(S.shape[1]), fontsize = 12)
+		plt.title('Semantic Description Matrix', fontsize = 14)
+		plt.show()
+
+	def read_npy(fpath):
+		# M_* is RGB, K_* is depth file. 
+		return np.load(fpath).flatten()
+
+	data = np.zeros((len(labels), 25 * 512))
+	for idx, fname in enumerate(rgb_fp_files):
+		data[idx, :] = read_npy(join(feature_map_dir, fname))
+
+	seen_data_input = data[seen_flags, :]
+	unseen_data_input = data[unseen_flags, :]
+
+	rel_labels = np.argmax(labels == absolute_class_ids[:, np.newaxis], axis = 0)
+	seen_data_output = rel_labels[seen_flags]
+	unseen_data_output = rel_labels[unseen_flags]
+
+	data = {}
+	data['seen_class_ids'] = seen_class_ids
+	data['unseen_class_ids'] = unseen_class_ids
+	data['absolute_class_ids'] = absolute_class_ids
+
+	data['seen_data_input'] = seen_data_input
+	data['unseen_data_input'] = unseen_data_input
+
+	data['seen_data_output'] = seen_data_output
+	data['unseen_data_output'] = unseen_data_output
+
+	data['seen_attr_mat'] = seen_attr_mat
+	data['unseen_attr_mat'] = unseen_attr_mat
+
+	return data
+
+######################################################
+################## Find best splits ##################
+######################################################
+
+def find_best_seen_unseen_splits(S, num_unseen_classes, K = 3):
+	'''
+	Description:
+		Given the SD matrix (S - num_classes x num_descriptors), 
+		the goal is find a set of seen and unseen class ids so that
+		the data imbalance in the seen dataset is minimized. 
+		In other words, it is ensured that all descriptors are both
+		present and absent in the seen data. 
+	Input arguments:
+		* S: semantic description matrix of all classes (num_classes, num_descriptors)
+		* num_unseen_classes: int. No. of unseen classes. 
+		* K: A hyperparameter. 100/K percentage of classes will be first
+			added to the list of seen classes. These classes contribute to the most
+			data imbalance at attribute level. 
+	'''
+	assert num_unseen_classes < S.shape[0], \
+		'No. of unseen classes cant be greater than total no. of classes. '
+	## Find num classes and descriptors
+	num_classes = S.shape[0]
+	num_descs = S.shape[1]
+	## Adaptive threshold. The init_num_seen_classes number of classes
+	# that are contributing towards to data imbalance will be added to 
+	# the seen classes. Rest of the classes are randomized. 
+	init_num_seen_classes = num_classes // K
+
+	freq = S.sum(axis = 0)
+	descs_order = np.argsort(freq)
+	seen_class_ids = []
+	unseen_class_ids = []
+
+	for desc_id in descs_order:
+		sd = S[:, desc_id]
+		zero_cls_ids = np.nonzero(sd == 0)[0]
+		one_cls_ids = np.nonzero(sd == 1)[0]
+		if(len(zero_cls_ids) < len(one_cls_ids)):
+			seen_class_ids += zero_cls_ids.tolist()
+		else:
+			seen_class_ids += one_cls_ids.tolist()
+		## If minimum of seen_class_ids is reached, then exit. 
+		if(len(np.unique(seen_class_ids)) > init_num_seen_classes):
+			seen_class_ids = seen_class_ids[0:init_num_seen_classes]
+			seen_class_ids = np.unique(seen_class_ids).tolist()
+			break
+	seen_class_ids = np.unique(seen_class_ids)
+	rest_ids = list(set(range(S.shape[0])).difference(seen_class_ids))
+	np.random.shuffle(rest_ids)
+
+	## Find seen/unseen class ids (relative)
+	unseen_class_ids = np.sort(rest_ids[:num_unseen_classes])
+	seen_class_ids = np.sort(np.append(seen_class_ids, rest_ids[num_unseen_classes:]))
+
+	return seen_class_ids, unseen_class_ids

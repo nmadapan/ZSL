@@ -1,5 +1,6 @@
 import numpy as np
 import pickle
+from os.path import join, isfile
 
 # from zsl_utils.datasets import awa
 # data = awa.get_data('./data/awa', debug = True)
@@ -13,6 +14,12 @@ import pickle
 # data_path = r'./data/gesture/data_0.61305.mat'
 # from zsl_utils.datasets import gestures
 # data = gestures.get_data(data_path, debug = True)
+
+data_path = r'/media/isat-deep/AHRQ IV/Naveen/ie590_project/fg2020_ie590/data'
+from zsl_utils.datasets import gestures_cgd2016 as gestures
+data = gestures.get_data(data_path, use_pickle = True, debug = True)
+from utils import print_dstruct
+print_dstruct(data)
 
 # from zsl_utils.plot import *
 
@@ -32,7 +39,3 @@ import pickle
 # 	for val in res[key]:
 # 		print('%.02f'%val, end = ' ')
 # 	print()
-
-a = None
-print(a in [None])
-print(isinstance(a, NoneType))

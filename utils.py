@@ -82,6 +82,21 @@ def print_dict(dict_inst, idx = 1):
 				print(value.shape)
 			else: print(value)
 
+def print_dstruct(data):
+	print('######################')
+	print('### Seen Classes ###')
+	print('Seen data input: ', data['seen_data_input'].shape)
+	print('Seen data output: ', data['seen_data_output'].shape)
+	print('Seen attribute matrix:', data['seen_attr_mat'].shape)
+	print('Seen class IDs:', data['seen_class_ids'].shape)
+
+	print('### Unseen Classes ###')
+	print('Uneen data input: ', data['unseen_data_input'].shape)
+	print('Unseen data output: ', data['unseen_data_output'].shape)
+	print('Unseen attribute matrix:', data['unseen_attr_mat'].shape)
+	print('Unseen class IDs:', data['unseen_class_ids'].shape)
+	print('######################\n')
+
 def is_binary(mat):
 	return len(np.unique(mat[:])) == 2
 

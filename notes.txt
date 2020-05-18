@@ -1,24 +1,23 @@
 
 * Backup everything that is in this computer so far. 
 * Make sure to push the code to git and copy the repositories as they have data. 
-* Get tensorflow and pytorch running in this computer. 
 
 ## Next 2 days
+* [DONE] Generate best seen-unseen class ids in Windows/Matlab.	
+	implement the python version of function_create_class_splits(dstruct)
+* Generate deep features using B-LSTM code that we have for vgg features and re-run all tests. 
+
 * [DONE: almost same] Add kernels to SAE and check the results on object and standard datasets. 
 * [DONE: minor change] Check if sae-like normalization boosts accuracies on ESZSL method. 
 * [DONE: No, it very similar] Check if removing kernels makes ESZSL accuracies worse.  
-
-* Generate deep features using B-LSTM code that we have and re-run all tests. 
-
 * [DONE] Convert the Kaushik data into standard format. SDs, class ids, I/O of seen/unseen classes. 
 * [DONE] Check if this is partially done in fg2020 - one of the files run_fg_session.m might have it. 
 * [DONE] Test how good the results are on this dataset using all our baselines. 
 * [DONE] Juan - Check MTurk interface and how it can be used for more annotations if needed.
-
-* Do hyperparameter search using this dataset for all methods. Create these scripts which does it all.
-* Generate best seen-unseen class ids in Windows/Matlab.
+* [DONE] Do hyperparameter search using this dataset for all methods. Create these scripts which does it all.
 
 ## Next 2 days
+* Get tensorflow and pytorch running in this computer. 
 * Get Attention LSTM, 3DConvLSTM, C3D networks working. 
 * Integrate these networks with SD loss and stuff. 
 

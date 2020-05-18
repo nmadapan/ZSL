@@ -1,0 +1,57 @@
+The Zero Shot Learning (ZSL) library is built on top of the scikit-learn
+library in order to facilitate ZSL while utilizing pre-built capabilities
+of scikit-learn. The scikit-learn architecture for classifiers and
+hyper-parameter tuning can not be used directly for ZSL as the I/O of
+ZSL is differeent conventional classification techniques. For instance,
+during training, ZSL requires semantic description matrix in addition 
+to input and output labels. Hence, this library is built to take 
+into account the ZSL I/O requirements. 
+
+Classifiers are re-written to comply with the following guidelines. 
+Each classifier inherits sklearn.base.BaseEstimator class which 
+defines get_params() and set_params() functions. The classifier
+class has the following functions:
+	* __init__(**parameters, rs = None, debug = True)
+		- rs is the random state
+		- if debug flag is True, relevant print statements should be activated.
+		- All parameters should be optional. 
+		- Do NOT declare any other instance variables except parameters. 
+		- Do NOT perform sanity checks on the parameters at this point. If 
+			you perform sanity checks in __init__, you will have to override
+			set_params function and perform sanity checks there as well. 
+			It is recommended to perform sanity checks in fit and 
+			decision_function functions instead of performing them in __init__. 
+	* fit(X, S, y)
+		- Perform sanity checks on the parameters
+		- Declare relevant attributes (instance variables that end with 
+			an underscore.)
+		- Do not do any hyperparameter search here. 
+		- If the input data is normalized, make sure to have a normalize flag
+			as a parameter. 
+		- If kernel is used within, make sure to have parameters to decide
+			the type of kernel and any variables associated with it. 
+	* decision_function(X, S)
+		- Perform sanity checks on the parameters
+		- Given input and SD matrix, predict the probabilities of the class labels. 
+		- S should have more than one row (more than one class)
+	* predict(X, S)
+		- Predict the final class label for each instance in X. 
+	* score(X, S, y)
+		- Predict the score which is an equivalent of accuracy (higher the better). 
+
+ZSLGridSearchCV:
+A module for hyperparameter search is implemented to tune the ZSL classifiers. 
+The syntax of the ZSLGridSearchCV is similar to the sklearn.model_selection.GridSearchCV. 
+In other words, an instance of ZSLGridSearchCV would be created by passing a ZSL model
+and parameter dictionary as input arguments. A call to fit() would first invoke
+set_params() and change the parameters of the ZSL model. Next, fit() of ZSL model 
+is called with X, S and y. Next, score() of ZSL model is called and this score
+is used to determine the best set of parameters. 
+
+ZSLPipeline:
+This module is implemented to perform multiple transformations followed by 
+classification in a streamlined fashion. For instance, data can be normalized
+and kernalized before performing classification. The functionalities of this
+module is similar to the skelarn.pipeline.Pipeline class that accepts a list
+of tuples. Each tuple will have two elements: first element is a string and
+second element is a classifier. 
