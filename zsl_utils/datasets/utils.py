@@ -294,7 +294,7 @@ def sun_to_dstruct(base_dir, debug = False):
 ####################### Others #######################
 ######################################################
 
-def geseture_to_dstruct(data_path, debug = False):
+def dstruct_to_standard(data_path, debug = False):
 	'''
 		Description:
 			Convert the ZSL data file that we have in Windows/Matlab into a
@@ -347,14 +347,14 @@ def get_cgd2016_data(csv_path, feature_map_dir, num_unseen_classes = 10, display
 		that the ZSL classifiers can learn to recognize those attributes. 
 	
 		In this script, we first identify the descriptors that are present/
-		absent only few times (\\approx <4) and appends the corresponding
+		absent only few times (\\approx <4) and we append the corresponding
 		classes to the list of seen classes. 
 	
 	Input arguments:
 		* csv_path: Absolute path to the annotated_videos.csv file. 
 			This csv file consists of 12117 rows including the row header,
-			24 columns. Each row corresponds to an instance in the CGD 2016
-			dataset. 
+			and 24 columns. Each row corresponds to an instance in the CGD
+			2016 dataset for 48 gesture categories. 
 			- Columns: 1 - 2
 				* path to RGB and Depth video
 			- Columns: 3
@@ -362,7 +362,7 @@ def get_cgd2016_data(csv_path, feature_map_dir, num_unseen_classes = 10, display
 			- Columns: 4 - 22
 				* Binary annotations of 19 semantic descriptors. 
 			- Columns: 23 - 24
-				* Path to the VGG 19 features. 
+				* Path to the VGG 19 features of RGB and Depth videos. 
 		* display: If True, SD matrix is visualized. 
 		* num_unseen_classes: No. of unseen classes
 	Return:
@@ -398,6 +398,7 @@ def get_cgd2016_data(csv_path, feature_map_dir, num_unseen_classes = 10, display
 	# print('No. of classes: ', num_classes)
 	# print('No. of descriptors: ', num_descs)
 
+	## Find a potential seen-unseen class split
 	seen_class_ids, unseen_class_ids = find_best_seen_unseen_splits(S, num_unseen_classes, K = 3)
 
 	## Find seen/unseen SD matrices

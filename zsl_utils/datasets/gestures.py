@@ -27,7 +27,7 @@ import bz2
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .utils import geseture_to_dstruct, print_dstruct
+from .utils import dstruct_to_standard, print_dstruct
 
 ## Main function present in dataset folders. 
 def get_data(data_path, debug = False, use_pickle = True, rerun = False):
@@ -71,7 +71,7 @@ def get_data(data_path, debug = False, use_pickle = True, rerun = False):
 		return data
 	
 	## Re-organiz the data in the standard format.
-	data = geseture_to_dstruct(data_path, debug = debug)
+	data = dstruct_to_standard(data_path, debug = debug)
 
 	if(debug): print_dstruct(data)
 	
