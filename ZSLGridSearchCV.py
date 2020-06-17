@@ -136,7 +136,7 @@ class ZSLGridSearchCV():
 		self.data_dict_ = data_dict # ATTRIBUTE
 		return dt, data_dict
 
-	def _create_splits(self, X, y):
+	def _create_splits(self, X = None, y = None): ## TODO: Remove X and y later
 		'''
 		Description:
 			This function randomizes and splits the class ids into self.cv folds.

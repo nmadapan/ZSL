@@ -50,6 +50,7 @@
 
 import sys
 from os.path import join, dirname
+from time import time
 import pickle
 
 from copy import deepcopy
@@ -231,24 +232,67 @@ class ESZSL(BaseEstimator):
 
 		y_pred = self.predict(X, S)
 		return accuracy_score(y, y_pred)
-		
-if __name__ == '__main__':
+
+def make_data(data_path):
 	### To test on gestures ###
 	from zsl_utils.datasets import gestures
-	print('Gesture Data ... ')
-	data_path = r'./data/gesture/data_0.61305.mat'
+	# print('Gesture Data ... ')
+	# data_path = r'./data/gesture/data_0.61305_raw.mat'
 	base_dir = dirname(data_path)
 	classes = ['A', 'B', 'C', 'D', 'E']
-	data = gestures.get_data(data_path, debug = True)
+	data = gestures.get_data(data_path, debug = False, use_pickle = False)
 	normalize = False
 	cut_ratio = 1
 	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
 				  'fp__skewedness': [6.], # [4., 6., 10.]
-				  'fp__n_components': [50],
+				  'fp__n_components': [1],
 				  'svm__C': [1.]} # [1., 10.]
 	p_type = 'binary'
 	out_fname = 'dap_gestures.pickle'
 	###########################
+
+	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
+
+	## Downsample the data: reduce the no. of instances per class
+	new_y_tr = []
+	for idx in np.unique(Y_tr):
+		temp = np.nonzero(Y_tr == idx)[0]
+		last_id = int(len(temp)/cut_ratio)
+		new_y_tr += temp[:last_id].tolist()
+	new_y_tr = np.array(new_y_tr)
+	Y_tr = Y_tr[new_y_tr]
+	X_tr = X_tr[new_y_tr, :]
+
+	# print('X_tr: ', X_tr.shape)
+	# print('Y_tr: ', Y_tr.shape)
+
+	X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
+	# print('X_ts: ', X_ts.shape)
+	# print('Y_ts: ', Y_ts.shape)
+
+	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	# print('S_tr: ', S_tr.shape)
+	# print('S_ts: ', S_ts.shape)
+
+	return (X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts)
+
+if __name__ == '__main__':
+	# ### To test on gestures ###
+	# from zsl_utils.datasets import gestures
+	# print('Gesture Data ... ')
+	# data_path = r'./data/gesture/data_0.61305.mat'
+	# base_dir = dirname(data_path)
+	# classes = ['A', 'B', 'C', 'D', 'E']
+	# data = gestures.get_data(data_path, debug = True)
+	# normalize = False
+	# cut_ratio = 1
+	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
+	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
+	# 			  'fp__n_components': [50],
+	# 			  'svm__C': [1.]} # [1., 10.]
+	# p_type = 'binary'
+	# out_fname = 'dap_gestures.pickle'
+	# ###########################
 
 	###### To test on awa #######
 	## This is to convert awa data to a compatible format.
@@ -308,37 +352,74 @@ if __name__ == '__main__':
 	# out_fname = 'dap_gestures.pickle'
 	###########################
 
-	X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
-	## Downsample the data: reduce the no. of instances per class
-	new_y_tr = []
-	for idx in np.unique(y_tr):
-		temp = np.nonzero(y_tr == idx)[0]
-		last_id = int(len(temp)/cut_ratio)
-		new_y_tr += temp[:last_id].tolist()
-	new_y_tr = np.array(new_y_tr)
-	y_tr = y_tr[new_y_tr]
-	X_tr = X_tr[new_y_tr, :]
+	# X_tr, y_tr = data['seen_data_input'], data['seen_data_output']
+	# ## Downsample the data: reduce the no. of instances per class
+	# new_y_tr = []
+	# for idx in np.unique(y_tr):
+	# 	temp = np.nonzero(y_tr == idx)[0]
+	# 	last_id = int(len(temp)/cut_ratio)
+	# 	new_y_tr += temp[:last_id].tolist()
+	# new_y_tr = np.array(new_y_tr)
+	# y_tr = y_tr[new_y_tr]
+	# X_tr = X_tr[new_y_tr, :]
 
-	X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
-	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	# X_ts, y_ts = data['unseen_data_input'], data['unseen_data_output']
+	# S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
-	print('Data Loaded. ')
+	# print('Data Loaded. ')
+
+	# from utils import ZSLPipeline, normalize
+	# clf = ZSLPipeline([('s', StandardScaler()),
+	# 				   ('c', ESZSL(degree = 1, debug = True)),
+	# 				  ])
+	# clf.set_params(c__sigmap = 1e1, c__lambdap = 1e-2)
+
+	# print('Fitting ...')
+	# clf.fit(X_tr, S_tr, y_tr)
+
+	# print('Predicting on train data')
+	# # Normalize each attribute first
+	# S_tr = normalize(S_tr, axis = 0)
+	# print(clf.score(X_tr, S_tr, y_tr))
+
+	# print('Predicting')
+	# # Normalize each attribute first
+	# S_ts = normalize(S_ts, axis = 0)
+	# print(clf.score(X_ts, S_ts, y_ts))
+
+	######################
+	######## LOOP ########
+	######################
 
 	from utils import ZSLPipeline, normalize
-	clf = ZSLPipeline([('s', StandardScaler()),
-					   ('c', ESZSL(degree = 1, debug = True)),
-					  ])
-	clf.set_params(c__sigmap = 1e1, c__lambdap = 1e-2)
+	from glob import glob
+	base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
+	mat_files = glob(join(base_dir, 'data_*.mat'))
 
-	print('Fitting ...')
-	clf.fit(X_tr, S_tr, y_tr)
+	K = 1
+	result = {}
+	start = time()
+	for mat_fpath in mat_files:
+		print(mat_fpath)
+		(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
+		temp = {}
+		in_start = time()
+		for iter_idx in range(K):
+			iter_start = time()
+			print('Iteration ', iter_idx, end = ': ')
+			clf = ZSLPipeline([('s', StandardScaler()),
+							   ('c', ESZSL(degree = 1, debug = True)),
+							  ])
+			clf.set_params(c__sigmap = 1e1, c__lambdap = 1e-2)
+			clf.fit(X_tr, S_tr, Y_tr)
+			S_ts = normalize(S_ts, axis = 0)
+			acc = clf.score(X_ts, S_ts, Y_ts)
+			temp[iter_idx] = [acc]
+			print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
+		result[mat_fpath] = temp
+		print('Time taken %.02f secs\n'%(time()-in_start))
 
-	print('Predicting on train data')
-	# Normalize each attribute first
-	S_tr = normalize(S_tr, axis = 0)
-	print(clf.score(X_tr, S_tr, y_tr))
+	with open('./results/eszsl_res.pickle', 'wb') as fp:
+		pickle.dump({'result': result}, fp)
 
-	print('Predicting')
-	# Normalize each attribute first
-	S_ts = normalize(S_ts, axis = 0)
-	print(clf.score(X_ts, S_ts, y_ts))
+	print('Total time taken: %.02f secs'%(time()-start))
