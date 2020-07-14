@@ -28,6 +28,8 @@ Make the attribute dataset without baselines - finish that repository.
 #####################
 * Combine the idea of zsl with siamese-like networks with triplet losses. 
 * Explore attention ZSL to see how it works. and may other baselines. 
+
+* Random forest equivalent of temporal zsl based on attributes. randomly select K attributes and average out results. 
 #####################
 
 #####################

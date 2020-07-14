@@ -24,8 +24,8 @@ class ZSLPipeline(Pipeline):
 	def decision_function(self, X, S):
 		return self.steps[-1][1].decision_function(self._transform(X), S)
 
-	def predict(self, X, S, y):
-		return self.steps[-1][1].predict(self._transform(X), S, y)
+	def predict(self, X, S):
+		return self.steps[-1][1].predict(self._transform(X), S)
 
 	def score(self, X, S, y):
 		return self.steps[-1][1].score(self._transform(X), S, y)

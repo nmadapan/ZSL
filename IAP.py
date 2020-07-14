@@ -53,8 +53,8 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score
 
-from utils import is_binary
-from SVMClassifier import SVMClassifierIAP
+from .utils import is_binary
+from .SVMClassifier import SVMClassifierIAP
 
 class IAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, 

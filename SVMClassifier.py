@@ -3,10 +3,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC, SVC
 from sklearn.kernel_approximation import SkewedChi2Sampler
 from sklearn.base import BaseEstimator
-from platt import SigmoidTrain, SigmoidPredict
 from sklearn.dummy import DummyClassifier
 
-from utils import CustomScaler
+from .utils import CustomScaler
+from .platt import SigmoidTrain, SigmoidPredict
 
 import warnings
 warnings.filterwarnings('ignore')

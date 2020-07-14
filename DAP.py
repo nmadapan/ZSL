@@ -53,9 +53,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
 from sklearn.metrics import f1_score, accuracy_score
 
-from utils import is_binary
-from SVMClassifier import SVMClassifier
-from SVMRegressor import SVMRegressor
+from .utils import is_binary
+from .SVMClassifier import SVMClassifier
+from .SVMRegressor import SVMRegressor
 
 class DAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, 

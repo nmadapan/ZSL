@@ -3,9 +3,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVR
 from sklearn.kernel_approximation import SkewedChi2Sampler
 from sklearn.base import BaseEstimator
-from platt import SigmoidTrain, SigmoidPredict
 
-from utils import CustomScaler
+from .platt import SigmoidTrain, SigmoidPredict
+from .utils import CustomScaler
 
 class SVMRegressor(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, clamp =3., rs=None):
