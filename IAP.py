@@ -222,7 +222,7 @@ class IAP(BaseEstimator):
 		## Attributes
 		self.class_prob_ = prob
 		self.attr_prob_ = P
-		return prob
+		return prob, P
 	
 	def predict(self, X, S):
 		'''
@@ -241,7 +241,7 @@ class IAP(BaseEstimator):
 			print('Error! clfs_ attribute does not exist. Run fit() first. ')
 			raise exp
 
-		return np.argmax(self.decision_function(X, S), axis=1)
+		return np.argmax(self.decision_function(X, S)[0], axis=1)
 
 	def score(self, X, S, y):
 		'''

@@ -191,7 +191,7 @@ class ESZSL(BaseEstimator):
 		# Class probabilities
 		Z = np.dot(S_pred, S.T)
 
-		return Z
+		return Z, S_pred
 	
 	def predict(self, X, S):
 		'''
@@ -210,7 +210,7 @@ class ESZSL(BaseEstimator):
 			print('Error! A_ attribute does not exist. Run fit() first. ')
 			raise exp
 
-		return np.argmax(self.decision_function(X, S), axis=1)
+		return np.argmax(self.decision_function(X, S)[0], axis=1)
 
 	def score(self, X, S, y):
 		'''

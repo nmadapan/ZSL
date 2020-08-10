@@ -53,6 +53,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
 from sklearn.metrics import f1_score, accuracy_score
 
+## Custom modules
 from .utils import is_binary
 from .SVMClassifier import SVMClassifier
 from .SVMRegressor import SVMRegressor
@@ -250,7 +251,7 @@ class DAP(BaseEstimator):
 		self.class_prob_ = prob # (n, z)
 		self.attr_prob_ = a_proba # (n, a)
 
-		return prob
+		return prob, a_proba
 	
 	def predict(self, X, S):
 		'''
@@ -269,7 +270,7 @@ class DAP(BaseEstimator):
 			print('Error! clfs_ attribute does not exist. Run fit() first. ')
 			raise exp
 
-		return np.argmax(self.decision_function(X, S), axis=1)
+		return np.argmax(self.decision_function(X, S)[0], axis=1)
 
 	def score(self, X, S, y):
 		'''

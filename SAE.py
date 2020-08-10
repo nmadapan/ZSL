@@ -51,8 +51,8 @@ import sys
 import pickle
 from time import time
 from sklearn.base import BaseEstimator
-from os.path import dirname, join
-from sklearn.metrics import accuracy_score
+from os.path import dirname, join, basename
+from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.metrics.pairwise import polynomial_kernel
 from sklearn.preprocessing import StandardScaler
 
@@ -180,7 +180,7 @@ class SAE(BaseEstimator):
 		# Class probabilities
 		Z = np.dot(S_pred, S.T)
 
-		return Z
+		return Z, S_pred
 
 	def predict(self, X, S):
 		'''
@@ -199,7 +199,7 @@ class SAE(BaseEstimator):
 		except AttributeError as exp:
 			print('Error! W_ attribute does not exist. Run fit() first. ')
 			raise exp
-		return np.argmax(self.decision_function(X, S), axis = 1)
+		return np.argmax(self.decision_function(X, S)[0], axis = 1)
 
 	def score(self, X, S, y):
 		'''
@@ -265,6 +265,16 @@ def make_data(data_path):
 	# print('S_ts: ', S_ts.shape)
 
 	return (X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts)
+
+def save_plot(c_prob, s_prob, y_pred, y_true, S, base_folder = '.', file_pref = 'res_'):
+	s_prob = (s_prob + 1)/2
+	print(np.min(s_prob.flatten()), np.max(s_prob.flatten())) # The values are approximately between -1 and 1 EDGAR WAS HERE
+	from zsl_utils.plot import plot_roc, plot_attAUC, plot_confusion
+	classes = list(map(str, list(range(S.shape[0]))))
+	C = confusion_matrix(y_true, y_pred, normalize = 'true')
+	plot_confusion(C, classes, join(base_folder, file_pref+'_conf.png'))
+	plot_roc(c_prob, y_pred, classes, join(base_folder, file_pref+'_croc.png'))
+	plot_attAUC(s_prob, S[y_true, :], join(base_folder, file_pref+'_aroc.png'))
 
 if __name__ == '__main__':
 
@@ -379,12 +389,13 @@ if __name__ == '__main__':
 
 	from utils import UnitScaler, ZSLPipeline, normalize
 	from glob import glob
-	base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
+	base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/deep_feat_data2' # deep_feet_data2, cust_feat_data
 	mat_files = glob(join(base_dir, 'data_*.mat'))
 
-	K = 2
+	K = 1
 	result = {}
 	start = time()
+	acc_list = []	
 	for mat_fpath in mat_files:
 		print(mat_fpath)
 		(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
@@ -396,11 +407,15 @@ if __name__ == '__main__':
 			clf = ZSLPipeline([('s', UnitScaler()),
 							   ('c', SAE(degree = None)),
 							  ])
-			clf.set_params(c__lambdap = 5e5)
+			clf.set_params(c__lambdap = 5e3)
 			clf.fit(X_tr, S_tr, Y_tr)
+			c_prob, s_prob = clf.decision_function(X_ts, S_ts)
 			# S_ts = normalize(S_ts, axis = 0)
+			y_pred = clf.predict(X_ts, S_ts)
 			acc = clf.score(X_ts, S_ts, Y_ts)
+			save_plot(c_prob, s_prob, y_pred, Y_ts, S_ts, './results/res_deep', basename(mat_fpath)[:-4]+'_')
 			temp[iter_idx] = [acc]
+			acc_list.append(acc)
 			print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
 		result[mat_fpath] = temp
 		print('Time taken %.02f secs\n'%(time()-in_start))
@@ -409,3 +424,4 @@ if __name__ == '__main__':
 		pickle.dump({'result': result}, fp)
 
 	print('Total time taken: %.02f secs'%(time()-start))	
+	print('Average Acc: %.02f \\pm %.02f'%(np.mean(acc_list), np.std(acc_list)))

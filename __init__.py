@@ -2,5 +2,6 @@ from .DAP import DAP
 from .ESZSL import ESZSL
 from .IAP import IAP
 from .SAE import SAE
-from .utils import ZSLPipeline
+from .SAE_CL import SAE_CL
+from .utils import ZSLPipeline, CustomScaler
 from .utils import UnitScaler
