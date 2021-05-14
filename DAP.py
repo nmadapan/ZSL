@@ -52,6 +52,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
 from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
+from sklearn.kernel_approximation import SkewedChi2Sampler
 
 ## Custom modules
 if __name__ == '__main__':
@@ -62,15 +63,15 @@ else:
 	from .utils import is_binary
 	from .SVMClassifier import SVMClassifier
 	from .SVMRegressor import SVMRegressor
+from utils import CustomScaler, ZSLPipeline, ClampScaler
 
 class DAP(BaseEstimator):
-	def __init__(self, skewedness=3., n_components=85, C=100, 
-							clamp = 2.999, rs = None, debug = False):
+	def __init__(self, C=100, rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
 				get_params() and set_params() functions. 
-			* Before performing zero shot learning, the Chi2 kernel is estimated
+			* Before instantiating this class, the Chi2 kernel needs to be estimated
 				as suggested in the  original paper. We use the following 
 				sklearn module: sklearn.kernel_approximation.SkewedChi2Sampler. 
 				This module requires skewedness and n_components as parameters. 
@@ -78,16 +79,8 @@ class DAP(BaseEstimator):
 				SkewedChi2Sampler can not be greater than skewedness value. 
 				Hence, the raw data is first normalized and then, clipped using
 				clamp on both positive and negative directions. 
-		Input parameters:
-			skewedness: It is a parameter in the Chi2 kernel. 
-			n_components: It is a parameter in the Chi2 kernel. This parameter
-				is equivalent to the no. of features that we want out of the
-				Chi2 kernel. 
+		Input parameters:		
 			C: Regularization parameter of the SVM classifier/regressor.
-			clamp: This is the maximum absolute value that the normalized features
-				are constrained to. If the normalized features exceed clamp, 
-				they will be clipped to this value. For instance, if -9 appears 
-				in normalized features, it is modified to -2.9 (the value of clamp).
 			rs: An integer indicating the random_state. This will be passed to the 
 				functions that has randomness involved. If None, then, there is 
 				no random state. The modules with randomness are: SkewedChi2Sampler,
@@ -99,11 +92,8 @@ class DAP(BaseEstimator):
 		'''
 
 		## Parameters
-		self.skewedness = skewedness
-		self.n_components = n_components
 		self.C = C
 		self.rs = rs
-		self.clamp = clamp # value of clamp should be less than skewedness
 		self.debug = debug
 
 		## Attributes: Modified by fit()
@@ -163,9 +153,6 @@ class DAP(BaseEstimator):
 		self.S_ = S		
 
 		## Assert - sanity checks
-		# The value of clamp can not be greater than skewedness. 
-		if(self.clamp > self.skewedness):
-			raise ValueError('Error! Value of clamp should be less than skewedness.')
 		# No. of classes in S and y should be consistent.
 		assert S.shape[0] == self.num_classes_, 'Error! No. of classes in S and y are inconsistent.'
 		# The values in y should be relative i.e. they should be 0, 1, ..., num_classes_-1
@@ -176,14 +163,10 @@ class DAP(BaseEstimator):
 		self.clfs_ = []
 		if(self.binary_):
 			for _ in range(self.num_attr_): 
-				self.clfs_.append(SVMClassifier(\
-				skewedness=self.skewedness, n_components=self.n_components, \
-				C=self.C, clamp = self.clamp, rs = self.rs))
+				self.clfs_.append(SVMClassifier(C=self.C, rs = self.rs))
 		else: 
 			for _ in range(self.num_attr_): 
-				self.clfs_.append(SVMRegressor(\
-				skewedness=self.skewedness, n_components=self.n_components,\
-				C=self.C, clamp = self.clamp, rs = self.rs))
+				self.clfs_.append(SVMRegressor(C=self.C, rs = self.rs))
 
 		## Training data is used for classification/regression, validation data is used 
 		# for platt fitting. 
@@ -311,10 +294,7 @@ def make_data(data_path):
 	data = gestures.get_data(data_path, debug = False, use_pickle = False)
 	normalize = False
 	cut_ratio = 1
-	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-				  'fp__skewedness': [6.], # [4., 6., 10.]
-				  'fp__n_components': [1],
-				  'svm__C': [1.]} # [1., 10.]
+	parameters = {'svm__C': [1.]} # [1., 10.]
 	p_type = 'binary'
 	out_fname = 'dap_gestures.pickle'
 	###########################
@@ -354,10 +334,7 @@ if __name__ == '__main__':
 	# data = gestures.get_data(data_path, debug = True)
 	# normalize = False
 	# cut_ratio = 1
-	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [1],
-	# 			  'svm__C': [1.]} # [1., 10.]
+	# parameters = {'svm__C': [1.]} # [1., 10.]
 	# p_type = 'binary'
 	# out_fname = 'dap_gestures.pickle'
 	# ###########################
@@ -398,10 +375,7 @@ if __name__ == '__main__':
 	# data = gestures.get_data(data_path, debug = True)
 	# normalize = False
 	# cut_ratio = 1
-	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [50],
-	# 			  'svm__C': [1.]} # [1., 10.]
+	# parameters = {'svm__C': [1.]} # [1., 10.]
 	# p_type = 'binary'
 	# out_fname = 'dap_gestures.pickle'
 	###########################
@@ -431,7 +405,15 @@ if __name__ == '__main__':
 	print('S_ts: ', S_ts.shape)
 
 	print('Data Loaded. ')
-	clf = DAP(skewedness=3., n_components=85, C=100., clamp = 3., rs = 42, debug = True)
+	debug = True
+	sk, nc, rs = 3., 85, 42
+	feature_map_fourier = SkewedChi2Sampler(skewedness=sk,	n_components=nc, random_state = rs)
+	# c_scaler = CustomScaler(clamp = clamp-0.001)
+	c_scaler = ClampScaler(clamp = sk-0.001)
+	clf = ZSLPipeline([('cs', c_scaler),
+						 ('fp', feature_map_fourier),
+						 ('dap', DAP(C=100., rs = rs, debug = debug))
+						])
 
 	print('Fitting')
 	clf.fit(X_tr, S_tr, Y_tr)
@@ -464,8 +446,17 @@ if __name__ == '__main__':
 	# 	for iter_idx in range(K):
 	# 		iter_start = time()
 	# 		print('Iteration ', iter_idx, end = ': ')
-	# 		clf = DAP(skewedness=6., n_components=50, C=10., clamp = 3.1, rs = None, debug = False)
-	# 		clf.fit(X_tr, S_tr, Y_tr)
+	#
+	# 		debug = True
+	# 		sk, nc, rs = 3., 85, 42
+	#		feature_map_fourier = SkewedChi2Sampler(skewedness=sk,	n_components=nc, random_state = rs)
+	# 		c_scaler = CustomScaler(clamp = sk-0.001)
+	# 		clf = ZSLPipeline([#('cs', c_scaler),
+	# 					 ('fp', feature_map_fourier),
+	# 					 ('dap', DAP(C=100., rs = rs, debug = debug))
+	# 					])
+	# 		
+	#		clf.fit(X_tr, S_tr, Y_tr)
 	# 		acc = clf.score(X_ts, S_ts, Y_ts)
 	# 		temp[iter_idx] = [acc]
 	# 		print('%.02f'%acc, '%.02f secs'%(time()-iter_start))

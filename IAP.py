@@ -51,14 +51,18 @@ from time import time
 
 import numpy as np
 from sklearn.base import BaseEstimator
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.kernel_approximation import SkewedChi2Sampler
 
+## Custom Modules
 if __name__ == '__main__':
 	from utils import is_binary
 	from SVMClassifier import SVMClassifierIAP
 else:
 	from .utils import is_binary
 	from .SVMClassifier import SVMClassifierIAP
+from utils import CustomScaler, ZSLPipeline, ClampScaler
+
 
 class IAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, 
@@ -67,7 +71,7 @@ class IAP(BaseEstimator):
 		Description:
 			* This class inherits BaseEstimator which defines 
 				get_params() and set_params() functions. 
-			* Before performing zero shot learning, the Chi2 kernel is estimated
+			* Before instantiating this class, the Chi2 kernel needs to be estimated
 				as suggested in the  original paper. We use the following 
 				sklearn module: sklearn.kernel_approximation.SkewedChi2Sampler. 
 				This module requires skewedness and n_components as parameters. 
@@ -96,11 +100,8 @@ class IAP(BaseEstimator):
 		'''
 
 		## Parameters
-		self.skewedness = skewedness
-		self.n_components = n_components
 		self.C = C
 		self.rs = rs
-		self.clamp = clamp # value of clamp should be less than skewedness
 		self.debug = debug	
 
 		## Attributes: Modified by fit()
@@ -160,9 +161,6 @@ class IAP(BaseEstimator):
 		self.S_ = S		
 
 		## Assert - sanity checks
-		# The value of clamp can not be greater than skewedness. 
-		if(self.clamp > self.skewedness):
-			raise ValueError('Error! Value of clamp should be less than skewedness.')
 		# No. of classes in S and y should be consistent.
 		assert S.shape[0] == self.num_classes_, 'Error! No. of classes in S and y are inconsistent.'
 		# The values in y should be relative i.e. they should be 0, 1, ..., num_classes_-1
@@ -170,8 +168,7 @@ class IAP(BaseEstimator):
 			raise ValueError('Error! Class indices in y should be relative: 0, 1, ..., num_classes-1')
 
 		## Initialize classifiers/regressors
-		self.clf_ = SVMClassifierIAP(skewedness=self.skewedness, n_components=self.n_components,\
-							C=self.C, clamp = self.clamp, rs = self.rs)
+		self.clf_ = SVMClassifierIAP(C=self.C,rs = self.rs)
 
 		if(self.debug): print('Training the model ...')
 		t0 = time()
@@ -281,10 +278,7 @@ def make_data(data_path):
 	data = gestures.get_data(data_path, debug = False, use_pickle = False)
 	normalize = False
 	cut_ratio = 1
-	parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-				  'fp__skewedness': [6.], # [4., 6., 10.]
-				  'fp__n_components': [1],
-				  'svm__C': [1.]} # [1., 10.]
+	parameters = {'svm__C': [1.]} # [1., 10.]
 	p_type = 'binary'
 	out_fname = 'dap_gestures.pickle'
 	###########################
@@ -324,27 +318,24 @@ if __name__ == '__main__':
 	# data = gestures.get_data(data_path, debug = True)
 	# normalize = False
 	# cut_ratio = 1
-	# parameters = {'cs__clamp': [3.], # [4., 6., 10.]
-	# 			  'fp__skewedness': [6.], # [4., 6., 10.]
-	# 			  'fp__n_components': [50],
-	# 			  'svm__C': [1.]} # [1., 10.]
+	# parameters = {'svm__C': [1.]} # [1., 10.]
 	# p_type = 'binary'
 	# out_fname = 'dap_gestures.pickle'
 	# ###########################
 
-	###### To test on awa #######
-	## This is to convert awa data to a compatible format.
-	# from zsl_utils.datasets import awa
-	# print('AwA data ...')
-	# base_dir = './data/awa'
-	# classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
-	# data = awa.get_data(base_dir, debug = True)
-	# normalize = False
-	# cut_ratio = 1
-	# parameters = None
-	# p_type = 'binary'
-	# out_fname = 'dap_awa.pickle'
-	#############################
+	##### To test on awa #######
+	# This is to convert awa data to a compatible format.
+	from zsl_utils.datasets import awa
+	print('AwA data ...')
+	base_dir = './data/awa'
+	classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
+	data = awa.get_data(base_dir, debug = True)
+	normalize = False
+	cut_ratio = 1
+	parameters = None
+	p_type = 'binary'
+	out_fname = 'dap_awa.pickle'
+	############################
 
 	###### To test on sun #######
 	# from zsl_utils.datasets import sun
@@ -359,69 +350,87 @@ if __name__ == '__main__':
 	# out_fname = 'dap_sun.pickle'
 	#############################
 
-	# X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
+	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
 
-	# ## Downsample the data: reduce the no. of instances per class
-	# new_y_tr = []
-	# for idx in np.unique(Y_tr):
-	# 	temp = np.nonzero(Y_tr == idx)[0]
-	# 	last_id = int(len(temp)/cut_ratio)
-	# 	new_y_tr += temp[:last_id].tolist()
-	# new_y_tr = np.array(new_y_tr)
-	# Y_tr = Y_tr[new_y_tr]
-	# X_tr = X_tr[new_y_tr, :]
+	## Downsample the data: reduce the no. of instances per class
+	new_y_tr = []
+	for idx in np.unique(Y_tr):
+		temp = np.nonzero(Y_tr == idx)[0]
+		last_id = int(len(temp)/cut_ratio)
+		new_y_tr += temp[:last_id].tolist()
+	new_y_tr = np.array(new_y_tr)
+	Y_tr = Y_tr[new_y_tr]
+	X_tr = X_tr[new_y_tr, :]
 
-	# print('X_tr: ', X_tr.shape)
-	# print('Y_tr: ', Y_tr.shape)
+	print('X_tr: ', X_tr.shape)
+	print('Y_tr: ', Y_tr.shape)
 
-	# X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
-	# print('X_ts: ', X_ts.shape)
-	# print('Y_ts: ', Y_ts.shape)
+	X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
+	print('X_ts: ', X_ts.shape)
+	print('Y_ts: ', Y_ts.shape)
 
-	# S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
-	# print('S_tr: ', S_tr.shape)
-	# print('S_ts: ', S_ts.shape)
+	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
+	print('S_tr: ', S_tr.shape)
+	print('S_ts: ', S_ts.shape)
 
-	# print('Data Loaded. ')
-	# clf = IAP(skewedness=6., n_components=50, C=1. ,clamp = 3.1, rs = 1)
+	print('Data Loaded. ')
+	debug = True
+	sk, nc, rs = 3., 50, 42
+	feature_map_fourier = SkewedChi2Sampler(skewedness=sk,	n_components=nc, random_state = rs)
+	c_scaler = ClampScaler(clamp = sk-0.001)
+	clf = ZSLPipeline([('cs', c_scaler),
+						 ('fp', feature_map_fourier),
+						 ('iap', IAP(C=100., rs = rs, debug = debug))
+						])
+	print('Fitting')
+	clf.fit(X_tr, S_tr, Y_tr)
 
-	# print('Fitting')
-	# clf.fit(X_tr, S_tr, Y_tr)
+	print('Predicting on train data')
+	print(clf.score(X_tr, S_tr, Y_tr))
 
-	# print('Predicting on train data')
-	# print(clf.score(X_tr, S_tr, Y_tr))
+	print('Predicting')
+	y_pred = clf.predict(X_ts, S_ts)
+	print(clf.score(X_ts, S_ts, Y_ts))
+	C = confusion_matrix(Y_ts, y_pred, normalize = 'true')
+	print(np.round(np.diag(C), 2))	
 
-	# print('Predicting')
-	# print(clf.score(X_ts, S_ts, Y_ts))
+	# ######################
+	# ######## LOOP ########
+	# ######################
 
-	######################
-	######## LOOP ########
-	######################
+	# from glob import glob
+	# base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
+	# mat_files = glob(join(base_dir, 'data_*.mat'))
 
-	from glob import glob
-	base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
-	mat_files = glob(join(base_dir, 'data_*.mat'))
+	# K = 10
+	# result = {}
+	# start = time()
+	# for mat_fpath in mat_files:
+	# 	print(mat_fpath)
+	# 	(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
+	# 	temp = {}
+	# 	in_start = time()
+	# 	for iter_idx in range(K):
+	# 		iter_start = time()
+	# 		print('Iteration ', iter_idx, end = ': ')
 
-	K = 10
-	result = {}
-	start = time()
-	for mat_fpath in mat_files:
-		print(mat_fpath)
-		(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
-		temp = {}
-		in_start = time()
-		for iter_idx in range(K):
-			iter_start = time()
-			print('Iteration ', iter_idx, end = ': ')
-			clf = IAP(skewedness=6., n_components=50, C=10., clamp = 3.1, rs = None, debug = False)
-			clf.fit(X_tr, S_tr, Y_tr)
-			acc = clf.score(X_ts, S_ts, Y_ts)
-			temp[iter_idx] = [acc]
-			print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
-		result[mat_fpath] = temp
-		print('Time taken %.02f secs\n'%(time()-in_start))
+	# 		debug = True
+	# 		sk, nc, rs = 3., 50, 42
+	# 		feature_map_fourier = SkewedChi2Sampler(skewedness=sk,	n_components=nc, random_state = rs)
+	# 		c_scaler = ClampScaler(clamp = sk-0.001)
+	# 		clf = ZSLPipeline([('cs', c_scaler),
+	# 					 ('fp', feature_map_fourier),
+	# 					 ('iap', IAP(C=100., rs = rs, debug = debug))
+	# 					])
 
-	with open('./results/iap_res.pickle', 'wb') as fp:
-		pickle.dump({'result': result}, fp)
+	# 		clf.fit(X_tr, S_tr, Y_tr)
+	# 		acc = clf.score(X_ts, S_ts, Y_ts)
+	# 		temp[iter_idx] = [acc]
+	# 		print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
+	# 	result[mat_fpath] = temp
+	# 	print('Time taken %.02f secs\n'%(time()-in_start))
 
-	print('Total time taken: %.02f secs'%(time()-start))
+	# with open('./results/iap_res.pickle', 'wb') as fp:
+	# 	pickle.dump({'result': result}, fp)
+
+	# print('Total time taken: %.02f secs'%(time()-start))

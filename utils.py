@@ -34,17 +34,29 @@ class ZSLPipeline(Pipeline):
 #################### Transformer ####################
 #####################################################
 
+class ClampScaler(TransformerMixin):
+	def __init__(self, clamp = 3.0):
+		super().__init__()
+		self.clamp = clamp
+
+	def fit(self, X, y = None):
+		return self
+	
+	def transform(self, T):
+		T[T > self.clamp] = self.clamp
+		T[T < -1 * self.clamp] = -1 * self.clamp
+		return T
+
 class CustomScaler(StandardScaler):
 	def __init__(self, clamp = 3.0):
 		super().__init__()
 		self.clamp = clamp
 
 	def transform(self, X):
-		X = np.copy(X) - self.mean_
-		X /= self.scale_
-		X[X > self.clamp] = self.clamp
-		X[X < -1 * self.clamp] = -1 * self.clamp
-		return X
+		T = super().transform(X)
+		T[T > self.clamp] = self.clamp
+		T[T < -1 * self.clamp] = -1 * self.clamp
+		return T
 
 class UnitScaler(BaseEstimator, TransformerMixin):
 	def __init__(self):
