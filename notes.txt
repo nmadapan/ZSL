@@ -1,18 +1,38 @@
+Paper plan:
+Intro:
+	* Why zero-shot and few-shot
+	* Why it is relevant for temporal problems such as gestures 
+	* Lack of unified frameworks
+	* Contributions:
+		- unified framework
+		- deep algorithm (internal thresholding and classification technique to improve GZSL)
+		- rigorous experiments on gestures dataset
+
+TODO: Cite some papers related to unified frameworks and gzsl, and action recognition (). 
+Previous work:
+	* ZSL
+	* FSL
+	* ZSL for temporal problems
+
+Methods:
+	* Combine RQ 1 and 2. 
+
+Experiments and results:
+	* FSL 
+	* ZSL
+	* GZSL
+	- four approaches (DAP, IAP, ESZSL, SAE, JSSE)
+	- five splits
+	ROC, AUC plots in each setting. 
+
 ## TODO
 * Organize the code well. Work on the design so that:
 	- easy to do hyper parameter tuning
 	- easy to play with different loss functions
 	- create a bunch of loss functions: eszsl, sae, cross entropy, mse, etc. Be consistent b/w sd and class predictions. 
-* What should be the criterion to end training
-	- no. of epochs
-	- gradient of training error
-	- 5/10 fold cv - when cv error reduces and increases. find that point. Each cv would yield a best model. now use one or all of the models based on test data distribution for unseen scenario. 
-	- diff b/w training and validation error. pick the minimum value. 
-* Either use binary LSTMs or implement a cross entropy equivalent of semantic descriptors. Convert each SD prediction value into a probability value between 0 and 1 - use element wise log softmax or equivalent. And do binary cross entropy for each SD and average it out or we can do weighted average based on the pdf of sds. 
 * Check the following:
 	1. find the sd pdf of seen classes. find the sd pdf of unseen classes. Check if they are significantly different. Ideally they should not be significantly different. If they are not significantly different, the cross validation splits with completely different pdf can be eliminated right here. 
 	2. Check if the model is always predicting a particular unseen class. that would mean we need to fix the knn part after sd prediction. Print the confusion matrix to see what is happening. 
-* Make the validation data so that it is compatible with ZSL setting
 * Generate custom features for each set of four frames ==> 40 frames would effectively give 10 frames but each frame is represented by a custom feature vector. 
 * GRU
 
@@ -48,3 +68,7 @@ We want to have stand alone classes for each ZSL method.
 We should be able to combine it with scalers in sklearn, kernel methods in sklearn using ZSLPipeline. 
 We should be able tune this combination using ZSLGridSearchCV. 
 #####################
+
+Wacv - 26 Aug
+Sony - 15 Sep (https://www.sony.com/electronics/research-award-program#FacultyInnovationAward)
+Amazon - 11 Oct (https://www.amazon.science/research-awards/call-for-proposals)

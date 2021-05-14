@@ -51,16 +51,21 @@ from time import time
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 
 ## Custom modules
-from .utils import is_binary
-from .SVMClassifier import SVMClassifier
-from .SVMRegressor import SVMRegressor
+if __name__ == '__main__':
+	from utils import is_binary
+	from SVMClassifier import SVMClassifier
+	from SVMRegressor import SVMRegressor
+else:
+	from .utils import is_binary
+	from .SVMClassifier import SVMClassifier
+	from .SVMRegressor import SVMRegressor
 
 class DAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, 
-							clamp = 2.9, rs = None, debug = False):
+							clamp = 2.999, rs = None, debug = False):
 		'''
 		Description:
 			* This class inherits BaseEstimator which defines 
@@ -248,6 +253,7 @@ class DAP(BaseEstimator):
 				prob.append(np.dot(Md, p))
 
 		## Attributes
+		prob = np.array(prob)
 		self.class_prob_ = prob # (n, z)
 		self.attr_prob_ = a_proba # (n, a)
 
@@ -356,19 +362,19 @@ if __name__ == '__main__':
 	# out_fname = 'dap_gestures.pickle'
 	# ###########################
 
-	###### To test on awa #######
-	## This is to convert awa data to a compatible format.
-	# from zsl_utils.datasets import awa
-	# print('AwA data ...')
-	# base_dir = './data/awa'
-	# classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
-	# data = awa.get_data(base_dir, debug = True)
-	# normalize = False
-	# cut_ratio = 1
-	# parameters = None
-	# p_type = 'binary'
-	# out_fname = 'dap_awa.pickle'
-	#############################
+	##### To test on awa #######
+	# This is to convert awa data to a compatible format.
+	from zsl_utils.datasets import awa
+	print('AwA data ...')
+	base_dir = './data/awa'
+	classes = np.loadtxt(join(base_dir, 'testclasses.txt'), dtype = str).tolist()
+	data = awa.get_data(base_dir, debug = True)
+	normalize = False
+	cut_ratio = 1
+	parameters = None
+	p_type = 'binary'
+	out_fname = 'dap_awa.pickle'
+	############################
 
 	###### To test on sun #######
 	# from zsl_utils.datasets import sun
@@ -400,69 +406,73 @@ if __name__ == '__main__':
 	# out_fname = 'dap_gestures.pickle'
 	###########################
 
-	# X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
+	X_tr, Y_tr = data['seen_data_input'], data['seen_data_output']
 
-	# ## Downsample the data: reduce the no. of instances per class
-	# new_y_tr = []
-	# for idx in np.unique(Y_tr):
-	# 	temp = np.nonzero(Y_tr == idx)[0]
-	# 	last_id = int(len(temp)/cut_ratio)
-	# 	new_y_tr += temp[:last_id].tolist()
-	# new_y_tr = np.array(new_y_tr)
-	# Y_tr = Y_tr[new_y_tr]
-	# X_tr = X_tr[new_y_tr, :]
+	## Downsample the data: reduce the no. of instances per class
+	new_y_tr = []
+	for idx in np.unique(Y_tr):
+		temp = np.nonzero(Y_tr == idx)[0]
+		last_id = int(len(temp)/cut_ratio)
+		new_y_tr += temp[:last_id].tolist()
+	new_y_tr = np.array(new_y_tr)
+	Y_tr = Y_tr[new_y_tr]
+	X_tr = X_tr[new_y_tr, :]
 
-	# print('X_tr: ', X_tr.shape)
-	# print('Y_tr: ', Y_tr.shape)
+	print('X_tr: ', X_tr.shape)
+	print('Y_tr: ', Y_tr.shape)
 
-	# X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
-	# print('X_ts: ', X_ts.shape)
-	# print('Y_ts: ', Y_ts.shape)
+	X_ts, Y_ts = data['unseen_data_input'], data['unseen_data_output']
+	print('X_ts: ', X_ts.shape)
+	print('Y_ts: ', Y_ts.shape)
 
-	# S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
-	# print('S_tr: ', S_tr.shape)
-	# print('S_ts: ', S_ts.shape)
+	S_tr, S_ts = data['seen_attr_mat'], data['unseen_attr_mat']
 
-	# print('Data Loaded. ')
-	# clf = DAP(skewedness=6., n_components=50, C=10. ,clamp = 3.1, rs = None, debug = True)
+	print('S_tr: ', S_tr.shape)
+	print('S_ts: ', S_ts.shape)
 
-	# print('Fitting')
-	# clf.fit(X_tr, S_tr, Y_tr)
+	print('Data Loaded. ')
+	clf = DAP(skewedness=3., n_components=85, C=100., clamp = 3., rs = 42, debug = True)
 
-	# print('Predicting on train data')
-	# print(clf.score(X_tr, S_tr, Y_tr))
+	print('Fitting')
+	clf.fit(X_tr, S_tr, Y_tr)
 
-	# print('Predicting')
-	# print(clf.score(X_ts, S_ts, Y_ts))
+	print('Predicting on train data')
+	print(clf.score(X_tr, S_tr, Y_tr))
+
+	print('Predicting')
+	y_pred = clf.predict(X_ts, S_ts)
+	print(clf.score(X_ts, S_ts, Y_ts))
+	C = confusion_matrix(Y_ts, y_pred, normalize = 'true')
+	print(np.round(np.diag(C), 2))
 
 	######################
 	######## LOOP ########
 	######################
 
-	from glob import glob
-	base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
-	mat_files = glob(join(base_dir, 'data_*.mat'))
+	# from glob import glob
+	# base_dir = r'/home/isat-deep/Desktop/Naveen/fg2020/data/raw_feat_data'
+	# mat_files = glob(join(base_dir, 'data_*.mat'))
 
-	K = 10
-	result = {}
-	start = time()
-	for mat_fpath in mat_files:
-		print(mat_fpath)
-		(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
-		temp = {}
-		in_start = time()
-		for iter_idx in range(K):
-			iter_start = time()
-			print('Iteration ', iter_idx, end = ': ')
-			clf = DAP(skewedness=6., n_components=50, C=10., clamp = 3.1, rs = None, debug = False)
-			clf.fit(X_tr, S_tr, Y_tr)
-			acc = clf.score(X_ts, S_ts, Y_ts)
-			temp[iter_idx] = [acc]
-			print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
-		result[mat_fpath] = temp
-		print('Time taken %.02f secs\n'%(time()-in_start))
+	# K = 10
+	# result = {}
+	# start = time()
+	# for mat_fpath in mat_files:
+	# 	print(mat_fpath)
+	# 	(X_tr, S_tr, Y_tr), (X_ts, S_ts, Y_ts) = make_data(mat_fpath)
+	# 	temp = {}
+	# 	in_start = time()
+	# 	for iter_idx in range(K):
+	# 		iter_start = time()
+	# 		print('Iteration ', iter_idx, end = ': ')
+	# 		clf = DAP(skewedness=6., n_components=50, C=10., clamp = 3.1, rs = None, debug = False)
+	# 		clf.fit(X_tr, S_tr, Y_tr)
+	# 		acc = clf.score(X_ts, S_ts, Y_ts)
+	# 		temp[iter_idx] = [acc]
+	# 		print('%.02f'%acc, '%.02f secs'%(time()-iter_start))
+	# 	result[mat_fpath] = temp
+	# 	print('Time taken %.02f secs\n'%(time()-in_start))
 
-	with open('./results/dap_res.pickle', 'wb') as fp:
-		pickle.dump({'result': result}, fp)
+	# with open('./results/dap_res.pickle', 'wb') as fp:
+	# 	pickle.dump({'result': result}, fp)
 
-	print('Total time taken: %.02f secs'%(time()-start))
+	# print('Total time taken: %.02f secs'%(time()-start))

@@ -53,8 +53,12 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score
 
-from .utils import is_binary
-from .SVMClassifier import SVMClassifierIAP
+if __name__ == '__main__':
+	from utils import is_binary
+	from SVMClassifier import SVMClassifierIAP
+else:
+	from .utils import is_binary
+	from .SVMClassifier import SVMClassifierIAP
 
 class IAP(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, 
@@ -220,6 +224,7 @@ class IAP(BaseEstimator):
 				prob.append(np.dot(Md, p))
 
 		## Attributes
+		prob = np.array(prob)
 		self.class_prob_ = prob
 		self.attr_prob_ = P
 		return prob, P

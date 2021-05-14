@@ -5,8 +5,8 @@ from sklearn.kernel_approximation import SkewedChi2Sampler
 from sklearn.base import BaseEstimator
 from sklearn.dummy import DummyClassifier
 
-from .utils import CustomScaler
-from .platt import SigmoidTrain, SigmoidPredict
+from utils import CustomScaler
+from platt import SigmoidTrain, SigmoidPredict
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -15,9 +15,9 @@ class SVMClassifier(BaseEstimator):
 	def __init__(self, skewedness=3., n_components=85, C=100, clamp =3., rs = None):
 		self.platt_params = []
 		self.feature_map_fourier = SkewedChi2Sampler(skewedness=skewedness,	n_components=n_components, random_state = rs)
-		self.c_scaler = CustomScaler(clamp = clamp-0.1)
+		self.c_scaler = CustomScaler(clamp = clamp-0.001)
 		# random_state plays a role in LinearSVC and SVC when dual = True (It is defaulted to True). 
-		self.clf_ = Pipeline([('cs', self.c_scaler),
+		self.clf_ = Pipeline([#('cs', self.c_scaler),
 							 ('fp', self.feature_map_fourier),
 							 ('svm', LinearSVC(C=C, random_state = rs, class_weight = 'balanced'))
 							])
